@@ -1,5 +1,10 @@
 # sinkline
 
+[![ci](https://github.com/samiali38183/sinkline/actions/workflows/ci.yml/badge.svg)](https://github.com/samiali38183/sinkline/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.9%E2%80%933.13-blue)
+![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
+![license](https://img.shields.io/badge/license-MIT-lightgrey)
+
 **Interprocedural taint analysis for Python web apps, mapped to the OWASP Top 10.**
 Zero dependencies. Emits SARIF for GitHub code scanning. Built from `ast` up — no Semgrep, no CodeQL.
 
