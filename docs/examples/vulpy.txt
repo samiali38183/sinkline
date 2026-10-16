@@ -1,0 +1,29 @@
+[CRITICAL] SL-SQLI-001 A03:2021 CWE-89  bad/mod_user.py:20:20
+  SQL built from tainted data
+  flask.request.form reaches sqlite3.Cursor.execute (inside login, bad/libuser.py:12) without a sanitizer for CWE-89.
+  ┌ source     bad/mod_user.py:16  username = request.form.get('username')  # flask.request.form
+  │ propagate  bad/mod_user.py:16  username = request.form.get('username')  # .get()
+  │ call       bad/mod_user.py:20  username = libuser.login(username, password)  # passed as `username` to login()
+  └ sink       bad/libuser.py:12  user = c.execute("SELECT * FROM users WHERE username = '{}' and password = '{}'".format(username  # sqlite3.Cursor.execute inside login()
+  fix: Use parameterized queries: cursor.execute('... WHERE id = ?', (user_id,))
+
+[CRITICAL] SL-SQLI-001 A03:2021 CWE-89  bad/mod_user.py:52:9
+  SQL built from tainted data
+  flask.request.form reaches sqlite3.Cursor.execute (inside create, bad/libuser.py:25) without a sanitizer for CWE-89.
+  ┌ source     bad/mod_user.py:45  username = request.form.get('username')  # flask.request.form
+  │ propagate  bad/mod_user.py:45  username = request.form.get('username')  # .get()
+  │ call       bad/mod_user.py:52  libuser.create(username, password)  # passed as `username` to create()
+  └ sink       bad/libuser.py:25  c.execute("INSERT INTO users (username, password, failures, mfa_enabled, mfa_secret) VALUES ('%s  # sqlite3.Cursor.execute inside create()
+  fix: Use parameterized queries: cursor.execute('... WHERE id = ?', (user_id,))
+
+[CRITICAL] SL-SQLI-001 A03:2021 CWE-89  bad/mod_user.py:80:9
+  SQL built from tainted data
+  flask.request.form reaches sqlite3.Cursor.execute (inside password_change, bad/libuser.py:53) without a sanitizer for CWE-89.
+  ┌ source     bad/mod_user.py:69  password = request.form.get('password')  # flask.request.form
+  │ propagate  bad/mod_user.py:69  password = request.form.get('password')  # .get()
+  │ call       bad/mod_user.py:80  libuser.password_change(g.session['username'], password) # = libuser.login(username, password)  # passed as `password` to password_change()
+  └ sink       bad/libuser.py:53  c.execute("UPDATE users SET password = '{}' WHERE username = '{}'".format(password, username))  # sqlite3.Cursor.execute inside password_change()
+  fix: Use parameterized queries: cursor.execute('... WHERE id = ?', (user_id,))
+
+3 finding(s) in 57 file(s), 216 function(s) summarized
+by OWASP: A03:2021 Injection: 3

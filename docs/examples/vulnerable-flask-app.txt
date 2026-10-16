@@ -1,0 +1,41 @@
+[CRITICAL] SL-SSTI-001 A03:2021 CWE-1336  app/app.py:114:12
+  Server-side template injection
+  flask.request.url reaches flask.render_template_string without a sanitizer for CWE-1336.
+  ┌ source     app/app.py:112  ''' % request.url  # flask.request.url
+  │ propagate  app/app.py:103  template = '''<html>  # %-format
+  └ sink       app/app.py:114  return render_template_string(template, dir = dir, help = help, locals = locals),404  # flask.render_template_string
+  fix: Pass user data as template *variables*, never into the template source.
+
+[CRITICAL] SL-SQLI-001 A03:2021 CWE-89  app/app.py:265:36
+  SQL built from tainted data
+  flask.request.json reaches execute without a sanitizer for CWE-89.
+  ┌ source     app/app.py:255  content = request.json  # flask.request.json
+  │ propagate  app/app.py:255  content = request.json  # assigned to `content`
+  │ propagate  app/app.py:259  search_term = content['search']  # assigned to `search_term`
+  │ propagate  app/app.py:261  str_query = "SELECT first_name, last_name, username FROM customer WHERE username = '%s';" % sear  # %-format
+  └ sink       app/app.py:265  search_query = db.engine.execute(str_query)  # execute
+  fix: Use parameterized queries; never format user input into the SQL string.
+
+[HIGH] SL-XSS-004 A03:2021 CWE-79  app/app.py:190:13
+  Reflected XSS: tainted string returned from view
+  flask.request.json reaches __return_http__ without a sanitizer for CWE-79.
+  ┌ source     app/app.py:178  content = request.json  # flask.request.json
+  │ propagate  app/app.py:178  content = request.json  # assigned to `content`
+  │ propagate  app/app.py:180  username = content['username']  # assigned to `username`
+  │ call       app/app.py:184  auth_token = jwt.encode({'user': username, 'exp': get_exp_date(), 'nbf': datetime.datetime.utcno  # jwt.encode() (unknown; assumed passthrough)
+  │ propagate  app/app.py:184  auth_token = jwt.encode({'user': username, 'exp': get_exp_date(), 'nbf': datetime.datetime.utcno  # assigned to `auth_token`
+  │ propagate  app/app.py:187  resp.headers['Authorization'] = "{0}".format(auth_token)  # str.format()
+  └ sink       app/app.py:190  return resp  # __return_http__
+  fix: Return a rendered template or escape the value with markupsafe.escape().
+
+[MEDIUM] SL-CRYPTO-001 A02:2021 CWE-328  app/app.py:141:25
+  Tainted secret hashed with MD5
+  flask.request.json reaches hashlib.md5 without a sanitizer for CWE-328.
+  ┌ source     app/app.py:137  content = request.json  # flask.request.json
+  │ propagate  app/app.py:137  content = request.json  # assigned to `content`
+  │ propagate  app/app.py:140  password = content['password']  # assigned to `password`
+  └ sink       app/app.py:141  hash_pass = hashlib.md5(password).hexdigest()  # hashlib.md5
+  fix: Use hashlib.sha256 or, for passwords, argon2/bcrypt/scrypt.
+
+4 finding(s) in 3 file(s), 57 function(s) summarized
+by OWASP: A02:2021 Cryptographic Failures: 1 · A03:2021 Injection: 3

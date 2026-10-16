@@ -1,0 +1,21 @@
+[CRITICAL] SL-SQLI-001 A03:2021 CWE-89  sqli/views.py:57:19
+  SQL built from tainted data
+  request reaches cur.execute (inside Student.create, sqli/dao/student.py:45) without a sanitizer for CWE-89.
+  ┌ source     sqli/views.py:52  async def students(request: Request):  # HttpRequest parameter
+  │ propagate  sqli/views.py:55  data = await request.post()  # assigned to `data`
+  │ call       sqli/views.py:57  await Student.create(conn, data['name'])  # passed as `name` to Student.create()
+  └ sink       sqli/dao/student.py:45  await cur.execute(q)  # cur.execute inside Student.create()
+
+[LOW] SL-LOGI-001 A09:2021 CWE-117  run.py:17:5
+  Log injection: tainted data in log message
+  sys.argv reaches logging.Logger.info without a sanitizer for CWE-117.
+  ┌ source     run.py:13  app = init_app(sys.argv[1:])  # sys.argv
+  │ call       run.py:13  app = init_app(sys.argv[1:])  # through init()
+  │ propagate  run.py:13  app = init_app(sys.argv[1:])  # assigned to `app`
+  │ propagate  run.py:15  host = app['config']['app']['host']  # assigned to `host`
+  │ propagate  run.py:17  log.info(f'App is listening at http://{host}:{port}')  # f-string
+  └ sink       run.py:17  log.info(f'App is listening at http://{host}:{port}')  # logging.Logger.info
+  fix: Log with parameters (logger.info('x=%r', x)) or strip newlines; never log secrets.
+
+2 finding(s) in 21 file(s), 172 function(s) summarized
+by OWASP: A03:2021 Injection: 1 · A09:2021 Security Logging and Monitoring Failures: 1

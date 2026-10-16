@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sinkline"
+version = "0.3.0"
+description = "Interprocedural taint analysis for Python web apps, mapped to the OWASP Top 10. Zero dependencies."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Sami Ali" }]
+keywords = ["security", "sast", "taint-analysis", "owasp", "static-analysis", "sarif", "flask", "django", "fastapi"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Topic :: Security",
+  "Topic :: Software Development :: Quality Assurance",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+sinkline = "sinkline.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/samiali38183/sinkline"
+
+[tool.setuptools.packages.find]
+include = ["sinkline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

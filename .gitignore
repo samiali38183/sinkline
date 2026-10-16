@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+bench/_ci_results.json
+bench/results.json
+*.sarif
+!docs/examples/*.sarif
