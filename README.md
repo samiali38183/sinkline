@@ -5,8 +5,10 @@
 ![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**Interprocedural taint analysis for Python web apps, mapped to the OWASP Top 10.**
-Zero dependencies. Emits SARIF for GitHub code scanning. Built from `ast` up — no Semgrep, no CodeQL.
+A static analyzer for Python web apps. It follows user input (Flask/FastAPI/Django request data,
+`sys.argv`, etc.) through your code and flags it when it reaches something dangerous like a SQL
+query or a shell command without being sanitized first. Findings map to the OWASP Top 10 and CWE,
+and it can output SARIF for GitHub code scanning. No dependencies; it's built on Python's `ast` module.
 
 ```
 $ sinkline scan bench/corpus/flask_app.py
@@ -20,8 +22,9 @@ $ sinkline scan bench/corpus/flask_app.py
   fix: Use parameterized queries: conn.execute('... WHERE id = ?', (user_id,))
 ```
 
-A pattern matcher sees `db.execute(...)` and reports every call. sinkline reports the ones an attacker
-can actually reach, shows the path, and stays quiet on the parameterized query three lines below.
+The reason I built it: tools that just pattern-match flag every `db.execute(...)` call. sinkline only
+reports the ones user input can actually reach, shows the path it took, and doesn't flag the
+parameterized query a few lines below.
 
 ## Quick start
 
@@ -47,49 +50,46 @@ python bench/score.py                           # precision 0.983  recall 0.951 
 
 ## Results
 
-**Labeled benchmark** — 109 hand-labeled lines across Flask, FastAPI, Django and CLI code
+**Labeled benchmark:** 109 hand-labeled lines across Flask, FastAPI, Django and CLI code
 (61 vulnerable, 48 safe variants of the same patterns), scored by `bench/score.py`:
 
 | tool | precision | recall | F1 |
 |---|---|---|---|
-| **sinkline** | **0.983** | **0.951** | **0.967** |
+| sinkline | 0.983 | 0.951 | 0.967 |
 | bandit 1.8 (lenient: any hit on a vulnerable line counts) | 0.623 | 0.541 | 0.579 |
 
-Every sinkline miss (3 FN, 1 FP) is a labeled, documented design limit — see
-[Limitations](#limitations). The score is a CI gate (`tests/test_corpus.py`).
+The 3 misses and 1 false positive are known limits, labeled in the corpus and listed under
+[Limitations](#limitations). CI fails if the score drops (`tests/test_corpus.py`).
 
-**Real-world case study** — run against four public Flask/aiohttp apps as checked out on 2026-10-15:
+**Real apps:** I also ran it on four public Flask/aiohttp projects (checked out 2026-10-15):
 
 | repo | commit | findings | notes |
 |---|---|---|---|
-| [fportantier/vulpy](https://github.com/fportantier/vulpy) | `5249cc8` | 3 × CWE-89 | all three in `bad/`, flowing `mod_user.py → libuser.py` across files; **0 in the `good/` tree** that defines the same function names |
+| [fportantier/vulpy](https://github.com/fportantier/vulpy) | `5249cc8` | 3 × CWE-89 | all three in `bad/`, flowing `mod_user.py → libuser.py` across files; 0 in the `good/` tree, which has the same function names |
 | [we45/Vulnerable-Flask-App](https://github.com/we45/Vulnerable-Flask-App) | `b6a4f97` | SSTI, SQLi, XSS, MD5 | four distinct OWASP categories |
 | [anxolerd/dvpwa](https://github.com/anxolerd/dvpwa) | `a1d8f89` | 1 × CWE-89, 1 × CWE-117 | aiohttp, async handlers |
-| [miguelgrinberg/microblog](https://github.com/miguelgrinberg/microblog) | `a975ef6` | **0** | well-written app; the `urlsplit(next).netloc != ''` redirect check is recognized as a guard |
+| [miguelgrinberg/microblog](https://github.com/miguelgrinberg/microblog) | `a975ef6` | 0 | well-written app; the `urlsplit(next).netloc != ''` redirect check is recognized as a guard |
 
-Full output in [`docs/examples/`](docs/examples/). The microblog result matters as much as the others:
-a tool that cannot say "clean" is noise.
+Full output is in [`docs/examples/`](docs/examples/). The microblog result is a good sign too, since it
+shows the tool isn't just flagging everything.
 
-## What it understands
+## What it handles
 
-- **Flow-sensitive dataflow** through assignments, f-strings, `%`/`.format`, slicing, string methods,
+- Tracks data through assignments, f-strings, `%`/`.format`, slicing, string methods,
   containers, comprehensions, `await`, augmented assignment, loops (to fixpoint), `try/except`.
-- **Interprocedural summaries** — two-pass analysis: learn what every function does with each parameter
-  (flows to return? reaches a sink? is a sanitizer wrapper?), then apply at call sites. Flows through
-  helpers, methods, and other files are reported at the entry point with the path into the callee.
-  Transitive: a sink two hops deep is still found.
-- **CWE-scoped sanitizers** — `shlex.quote` clears command injection and nothing else; `html.escape`
-  clears XSS and nothing else; `int()` clears everything. A shell-safe value is not SQL-safe.
-- **Validation guards** — `if not x.isdigit(): abort()`, `if x not in ALLOWED: return 400`,
+- Follows input across function calls and files. The first pass records what each function does with
+  its parameters, the second uses that at each call site, so a sink two calls deep still gets found.
+- Sanitizers only count for the bug type they fix. `shlex.quote` clears command injection but not SQL
+  injection, `html.escape` clears XSS only, and `int()` clears everything.
+- Recognizes validation checks like `if not x.isdigit(): abort()`, `if x not in ALLOWED: return 400`,
   `if ".." in f or f.startswith("/")`, `re.fullmatch`, `urlparse(x).netloc == ""`, `try: int(x) except: abort()`.
-  Boolean combinations follow De Morgan; a guard only survives a branch merge if it holds on every
-  path where the variable is still tainted.
-- **Keyword gates** — `subprocess.run(..., shell=True)` vs `shell=False`; `yaml.load(..., Loader=SafeLoader)`;
+  A check only counts if it holds on every path where the value is still tainted.
+- Looks at arguments that change the risk: `subprocess.run(..., shell=True)` vs `shell=False`; `yaml.load(..., Loader=SafeLoader)`;
   `torch.load(..., weights_only=True)`.
-- **Framework sources** — Flask `request.*`, FastAPI path params and `Query()`/`Form()`/`Header()`
+- Input sources: Flask `request.*`, FastAPI path params and `Query()`/`Form()`/`Header()`
   (typed `int`/`UUID` params are not tainted), Django `request.GET/POST/COOKIES/META`, aiohttp,
   `sys.argv`, `input()`, `os.environ`, sockets.
-- **138 sink signatures / 42 rules** across all ten OWASP 2021 categories: SQLi, command injection,
+- 138 sink signatures and 42 rules covering all ten OWASP 2021 categories: SQLi, command injection,
   code injection, SSTI, XSS, path traversal, Zip/Tar Slip, open redirect, SSRF, deserialization
   (`pickle`, `yaml`, `torch.load`, `marshal`), weak hashing, log injection, XXE.
 
@@ -126,7 +126,7 @@ for f in res.findings:
 
 ## Design
 
-Read [`docs/DESIGN.md`](docs/DESIGN.md) for the full writeup. The pipeline:
+Full writeup is in [`docs/DESIGN.md`](docs/DESIGN.md). Overview:
 
 ```
  files ──▶ ast.parse ──▶ resolve.py ──────────────▶ engine.py ─────────────────▶ report.py
@@ -142,18 +142,14 @@ Read [`docs/DESIGN.md`](docs/DESIGN.md) for the full writeup. The pipeline:
 
 The short version:
 
-1. **Abstract domain.** A `Taint` is `(labels, cleared_cwes, trail)`. Join = union of labels,
-   *intersection* of cleared CWEs (sanitized on one path ≠ sanitized). A sink for CWE `c` fires when
-   labels ≠ ∅ and `c ∉ cleared`.
-2. **Intraprocedural.** An abstract interpreter over function bodies keeps `env: name → Taint`.
-   Branches are analyzed separately and joined (may-analysis). Branches that exit don't join.
-   Loops iterate to a fixpoint.
-3. **Interprocedural.** Pass 1 runs every function with parameters bound to `param:i` labels and
-   records a `Summary`. Pass 2 runs with real sources and consults summaries at call sites.
-   Summaries are keyed by module-qualified name derived from the file path, so `bad/libuser.py` and
-   `good/libuser.py` don't collide; ambiguous short names are poisoned rather than guessed.
-4. **Everything else is data.** `model.py` is a declarative table of sources, sinks (with keyword
-   gates), sanitizers (with the CWEs they clear), and passthrough functions. Adding a sink is one line.
+1. Each value carries a taint record: where it came from, which bug types it's been sanitized for,
+   and the path so far. When two branches merge, a value only stays sanitized if it was sanitized on
+   both branches.
+2. Inside a function, the engine walks the code and tracks taint per variable. Branches are checked
+   separately and merged; loops repeat until nothing changes.
+3. Across functions, pass 1 builds a summary of each function and pass 2 uses those summaries at call
+   sites. Summaries are keyed by full module path so same-named functions in different files don't mix.
+4. Sources, sinks and sanitizers all live in a table in `model.py`, so adding a new sink is one line.
 
 ```
 sinkline/
@@ -171,19 +167,19 @@ tests/          37 unit tests (one tiny program per engine feature) + corpus gat
 
 ## Limitations
 
-These are labeled `known FN` / `known FP` in `bench/corpus/hard_app.py` so the score keeps them visible.
+These are labeled `known FN` / `known FP` in `bench/corpus/hard_app.py` so they count against the score.
 
-- **Object fields across methods** — `self.target = request.args[...]` in `load()`, `os.system(self.target)`
+- Object fields across methods: `self.target = request.args[...]` in `load()`, `os.system(self.target)`
   in `fire()`. Needs a heap model.
-- **Closures capturing outer taint.**
-- **Module globals across requests** — `CACHE["q"] = tainted` in one handler, read in another.
-- **Key-sensitive containers** — `{"id": 1, "note": tainted}["id"]` reads as tainted (the one FP).
-- **Equality chains as allowlists** — `if t == "a": … elif t == "b": … else: abort()`.
+- Closures that capture tainted variables.
+- Module globals across requests: `CACHE["q"] = tainted` in one handler, read in another.
+- Dict keys: `{"id": 1, "note": tainted}["id"]` reads as tainted (the one FP).
+- if/elif chains used as allowlists: `if t == "a": … elif t == "b": … else: abort()`.
 - Dynamic dispatch, `getattr`, `exec`-generated code, decorators that rewrite arguments.
 
 Also: this is a static analyzer. It cannot prove exploitability, only reachability without sanitization.
-The benchmark is small (109 labeled lines) and written by the same person who wrote the analyzer; the
-four real-world repos are the independent check, and more of them would make the numbers mean more.
+The benchmark is small (109 labeled lines) and I labeled it myself, so the four real-world repos are
+the more independent check. More of those would make the numbers stronger.
 Python only; no JavaScript templates, no modeling of ORM query builders beyond the raw-SQL entry points
 (`sqlalchemy.text`, `QuerySet.raw`, `Session.execute`), no type inference beyond receiver resolution.
 
