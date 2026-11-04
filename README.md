@@ -23,6 +23,28 @@ $ sinkline scan bench/corpus/flask_app.py
 A pattern matcher sees `db.execute(...)` and reports every call. sinkline reports the ones an attacker
 can actually reach, shows the path, and stays quiet on the parameterized query three lines below.
 
+## Quick start
+
+Python 3.9+, no dependencies.
+
+```bash
+pip install git+https://github.com/samiali38183/sinkline
+sinkline scan path/to/app                      # text report with source → sink paths
+sinkline scan . --format sarif -o out.sarif     # upload to GitHub code scanning
+sinkline scan . --fail-on high                  # exit 1 for CI if anything high/critical
+sinkline explain SL-CMDI-003                    # what a rule matches and why
+```
+
+To see it on the labeled benchmark instead of your own code:
+
+```bash
+git clone https://github.com/samiali38183/sinkline && cd sinkline
+pip install -e ".[dev]"
+sinkline scan bench/corpus/flask_app.py         # 21 findings, each with its flow
+pytest -q                                       # 37 tests + corpus precision/recall gate
+python bench/score.py                           # precision 0.983  recall 0.951  F1 0.967
+```
+
 ## Results
 
 **Labeled benchmark** — 109 hand-labeled lines across Flask, FastAPI, Django and CLI code
@@ -34,7 +56,7 @@ can actually reach, shows the path, and stays quiet on the parameterized query t
 | bandit 1.8 (lenient: any hit on a vulnerable line counts) | 0.623 | 0.541 | 0.579 |
 
 Every sinkline miss (3 FN, 1 FP) is a labeled, documented design limit — see
-[What it does not do](#what-it-deliberately-does-not-do). The score is a CI gate (`tests/test_corpus.py`).
+[Limitations](#limitations). The score is a CI gate (`tests/test_corpus.py`).
 
 **Real-world case study** — run against four public Flask/aiohttp apps as checked out on 2026-10-15:
 
@@ -71,16 +93,16 @@ a tool that cannot say "clean" is noise.
   code injection, SSTI, XSS, path traversal, Zip/Tar Slip, open redirect, SSRF, deserialization
   (`pickle`, `yaml`, `torch.load`, `marshal`), weak hashing, log injection, XXE.
 
-## Install & use
+## Usage
 
 ```bash
-pip install git+https://github.com/samiali38183/sinkline
 sinkline scan path/to/app                      # text report
 sinkline scan . --format sarif -o out.sarif     # GitHub code scanning
 sinkline scan . --format html -o report.html    # shareable single file
 sinkline scan . --fail-on high                  # exit 1 for CI
 sinkline scan . --baseline old.json             # only new findings (stable fingerprints)
-sinkline rules                                  # list rules by OWASP category
+sinkline scan . --min-confidence high           # drop low-confidence flows
+sinkline rules                                  # list 42 rules by OWASP category
 sinkline explain SL-CMDI-003
 ```
 
@@ -102,9 +124,23 @@ for f in res.findings:
     print(f.rule_id, f.cwe, f.file, f.line, [s.kind for s in f.flow])
 ```
 
-## How it works
+## Design
 
-Read [`docs/DESIGN.md`](docs/DESIGN.md) for the full writeup. The short version:
+Read [`docs/DESIGN.md`](docs/DESIGN.md) for the full writeup. The pipeline:
+
+```
+ files ──▶ ast.parse ──▶ resolve.py ──────────────▶ engine.py ─────────────────▶ report.py
+                        imports, aliases,     pass 1: run every function      text / JSON /
+                        receiver types        with params as param:i labels   SARIF 2.1.0 / HTML
+                                              → Summary per function
+                              ▲               pass 2: run with real sources,
+                              │               consult summaries at call sites
+                              │               → Finding(rule, flow, cwe)
+                           model.py  ─────────────────┘
+                           SOURCES · SINKS (keyword gates) · SANITIZERS (CWE-scoped) · PASSTHROUGH
+```
+
+The short version:
 
 1. **Abstract domain.** A `Taint` is `(labels, cleared_cwes, trail)`. Join = union of labels,
    *intersection* of cleared CWEs (sanitized on one path ≠ sanitized). A sink for CWE `c` fires when
@@ -121,7 +157,7 @@ Read [`docs/DESIGN.md`](docs/DESIGN.md) for the full writeup. The short version:
 
 ```
 sinkline/
-  engine.py    1100 lines  abstract interpreter, summaries, guards, fixpoint
+  engine.py    1190 lines  abstract interpreter, summaries, guards, fixpoint
   model.py      420 lines  sources / sinks / sanitizers / OWASP+CWE table
   resolve.py    150 lines  import + alias + receiver-type resolution
   report.py     230 lines  text / JSON / SARIF 2.1.0 / HTML
@@ -133,7 +169,7 @@ bench/
 tests/          37 unit tests (one tiny program per engine feature) + corpus gate
 ```
 
-## What it deliberately does not do
+## Limitations
 
 These are labeled `known FN` / `known FP` in `bench/corpus/hard_app.py` so the score keeps them visible.
 
@@ -146,6 +182,10 @@ These are labeled `known FN` / `known FP` in `bench/corpus/hard_app.py` so the s
 - Dynamic dispatch, `getattr`, `exec`-generated code, decorators that rewrite arguments.
 
 Also: this is a static analyzer. It cannot prove exploitability, only reachability without sanitization.
+The benchmark is small (109 labeled lines) and written by the same person who wrote the analyzer; the
+four real-world repos are the independent check, and more of them would make the numbers mean more.
+Python only; no JavaScript templates, no modeling of ORM query builders beyond the raw-SQL entry points
+(`sqlalchemy.text`, `QuerySet.raw`, `Session.execute`), no type inference beyond receiver resolution.
 
 ## Development
 
