@@ -92,7 +92,8 @@ Each of these is implemented in the code and covered by tests; the reasoning is 
   return value, which reach sinks (transitively), and whether the function is a thin sanitizer
   wrapper. Pass 2 reuses the summary at every call site. Analysis stays linear in program size and a
   sink two calls deep (`test_two_hop_sink`) is still found. The cost: summaries are
-  context-insensitive.
+  context-insensitive, and the summary pass runs a fixed two rounds, so deeper helper chains can be
+  missed (see Limitations).
 - **CWE-scoped sanitizers.** A taint value carries the set of CWEs it has been cleaned for.
   `shlex.quote` clears command injection only, `html.escape` clears XSS only, `int()` clears
   everything. Treating sanitization as one global boolean makes a shell-safe value look SQL-safe, a
@@ -262,10 +263,17 @@ for f in res.findings:
   resolution.
 - **Summaries are context-insensitive** (one per function, not per call site).
 - **No coverage for A04 and A06** OWASP categories (see above).
-- **CI status.** The test matrix covers Python 3.9, 3.12, 3.13 on Linux, Windows and macOS. In the
-  most recent run on `main` (README commit `3807f19`) the Linux and Windows jobs passed and the
-  three macOS jobs failed with "The job was not acquired by Runner of type hosted", a runner
-  availability error rather than a test failure.
+- **Summary pass is two fixed rounds, not a fixpoint.** Pass 1 runs over all files twice
+  (`engine.py`, `scan_path`). A chain of three or more helper functions between the source and the
+  sink can be missed when the helpers are defined caller-first; in a synthetic check, a view calling
+  `h0` to `h1` to `h2` (sink) was not reported, while two helpers, or the same three defined
+  callee-first, were. Chains of two helpers (`test_two_hop_sink`) are covered.
+- **`re.escape` is registered as a sanitizer for CWE-89 (SQL injection) as well as CWE-1333
+  (`model.py`).** It escapes regex metacharacters, not SQL syntax, so treating it as a SQL sanitizer
+  can hide a real injection: a tainted value passed through `re.escape` and concatenated into a query
+  produces no finding.
+- **CI scope.** The test matrix is Python 3.9, 3.12 and 3.13 on Linux, Windows and macOS
+  (`.github/workflows/ci.yml`).
 
 ## Roadmap
 
