@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.1 (2026-11-10)
+
+Security
+- GitHub Action: inputs (`path`, `fail-on`, `min-confidence`) were interpolated straight into a shell
+  line with `${{ inputs.* }}`, so a workflow that passed an untrusted or attacker-influenced value
+  (for example a branch name or PR-derived string) could run arbitrary commands on the runner
+  (CWE-78 / GitHub Actions script injection). Inputs now go through `env:`, are used quoted as single
+  arguments in `scripts/action-scan.sh`, and `fail-on` / `min-confidence` are validated against an
+  allow-list. A path starting with `-` is no longer parsed as an option. `tests/test_action.py` runs
+  the script with hostile values; the README section "Using the GitHub Action safely" shows the unsafe
+  and safe forms. If you used the action with any input you do not fully control, upgrade and pin to a
+  tag or commit.
+
+Fixes
+- try/except: taint after a `try` is now the join of the try body (plus `else`) and each handler that
+  does not exit, with handlers entering from the join of every state the body passed through. Before,
+  the handler body was visited in sequence, so `host = request.args["h"]` followed by
+  `except: host = "localhost"` lost the taint (false negative). `docs/DESIGN.md` already described a join.
+- `--exclude-tests` matched the substring `test` in a file name, so `latest.py`, `attestation.py` and
+  `contest/app.py` were skipped, and any scan root below a directory named `tests` skipped everything.
+  It now matches path segments relative to the scan root (`test/`, `tests/`, `testing/`) and the file
+  names `test_*.py`, `*_test.py`, `tests.py`, `conftest.py`.
+- `_returns_html` ended in `... or True`, which made the preceding `"<" in src` and `isinstance` checks
+  dead code. The behavior was already "flag any tainted string return except JSON-like values"; the
+  dead expression is removed and that behavior is pinned by tests. Narrowing to returns that contain
+  `<` would miss `return request.args["q"]`, which Flask serves as HTML.
+
 ## 0.4.0 (2026-11-10)
 
 Benchmark (`python bench/score.py`): precision 0.983 to 1.000, recall 0.951 to 0.967, F1 0.967 to

