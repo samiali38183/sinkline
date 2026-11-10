@@ -780,13 +780,37 @@ class FileAnalyzer(ast.NodeVisitor):
             return node.attr.isupper()
         return False
 
+    @staticmethod
+    def _join_envs(a: Dict[str, Taint], b: Dict[str, Taint]) -> Dict[str, Taint]:
+        return {k: a.get(k, EMPTY).union(b.get(k, EMPTY)) for k in set(a) | set(b)}
+
     def visit_Try(self, node: ast.Try) -> None:
+        """Taint after try/except is the join of every path that reaches the statement after it.
+
+        Paths: the try body (plus `else`) running to completion, and each handler that does not
+        exit. A handler starts from the join of every state the body passed through, because an
+        exception can be raised after any statement of the body.
+        """
+        pre_guards = dict(self.guards)
+        entry = dict(self.env)
         for s in node.body:
             self.visit(s)
+            entry = self._join_envs(entry, self.env)
+        for s in node.orelse:
+            self.visit(s)
+        outcomes = [(self.env, self.guards)]
         for h in node.handlers:
+            self.env, self.guards = dict(entry), dict(pre_guards)
             for s in h.body:
                 self.visit(s)
-        for s in node.orelse + node.finalbody:
+            if not self._block_exits(h.body):
+                outcomes.append((self.env, self.guards))
+        env, guards = outcomes[0]
+        for e, g in outcomes[1:]:
+            env = self._join_envs(env, e)
+            guards = {k: v & g[k] for k, v in guards.items() if k in g}
+        self.env, self.guards = env, guards
+        for s in node.finalbody:
             self.visit(s)
 
     visit_TryStar = visit_Try  # type: ignore[assignment]

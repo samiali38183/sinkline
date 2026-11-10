@@ -553,3 +553,74 @@ def test_self_field_is_per_class():
             os.system("ping " + self.target)
     """)
     assert r == {}
+
+
+# ---- try/except join ---------------------------------------------------------
+
+def test_try_except_keeps_taint_when_handler_reassigns():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        try:
+            host = request.args["h"]
+        except KeyError:
+            host = "localhost"
+        os.system("ping " + host)
+    """)
+    assert r == {12: {"CWE-78"}}
+
+
+def test_try_except_pre_try_taint_survives_handler_overwrite():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        host = request.args["h"]
+        try:
+            int(host)
+        except ValueError:
+            host = "localhost"
+        os.system("ping " + host)
+    """)
+    assert r == {13: {"CWE-78"}}
+
+
+def test_try_except_clean_on_every_path_is_clean():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        try:
+            host = shlex.quote(request.args["h"])
+        except KeyError:
+            host = "localhost"
+        os.system("ping " + host)
+    """)
+    assert r == {}
+
+
+def test_try_except_aborting_handler_is_not_a_path():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        try:
+            host = shlex.quote(request.args["h"])
+        except KeyError:
+            host = request.args["raw"]
+            raise ValueError("bad")
+        os.system("ping " + host)
+    """)
+    assert r == {}
+
+
+def test_try_else_and_finally_run_after_join():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        host = "localhost"
+        try:
+            pass
+        except KeyError:
+            host = request.args["h"]
+        finally:
+            os.system("ping " + host)
+    """)
+    assert r == {14: {"CWE-78"}}
