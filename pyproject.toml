@@ -47,5 +47,4 @@ select = ["E4", "E7", "E9", "F", "B"]
 ignore = ["B905"]  # zip(strict=) needs 3.10+
 
 [tool.mypy]
-python_version = "3.9"
 files = ["sinkline"]
