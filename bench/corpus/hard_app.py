@@ -2,7 +2,7 @@
 
 Cross-file flow (see hard_helpers.py), class state, loops, try/except, async, closures,
 dict/list containers, kwargs, walrus, comprehensions, decorators, globals.
-Lines marked `-- known FN` / `-- known FP` are documented design limits.
+Lines marked `-- known FN` are documented design limits.
 """
 import asyncio
 import json

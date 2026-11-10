@@ -32,7 +32,7 @@ taint tools; a value that is shell-safe is not SQL-safe.
 
 ## Intraprocedural analysis
 
-The core is a flow-sensitive abstract interpreter over function bodies (`TaintVisitor` in `engine.py`).
+The core is a flow-sensitive abstract interpreter over function bodies (`FileAnalyzer` in `engine.py`).
 `env: dict[str, Taint]` maps variable names (and `self.attr`) to their current taint.
 
 * **Assignment** evaluates the RHS to a `Taint` and binds it to each target, destructuring tuples.
@@ -40,8 +40,12 @@ The core is a flow-sensitive abstract interpreter over function bodies (`TaintVi
   comprehensions, `await`, and a table of string methods all return the union of their operands.
 * **Branches** (`if`) are analyzed separately and the environments are joined (may-analysis). A branch
   that unconditionally exits (`return`, `raise`, `abort()`, `sys.exit()`) does not contribute to the join.
-* **Loops** iterate to a fixpoint (bounded at 8 rounds; the domain is finite so this always converges
-  on real code).
+* **Loops** iterate until the environment stops changing, bounded at 3 rounds (`MAX_LOOP_ROUNDS`).
+* **Dict literals with constant string keys** keep per-key taint alongside the container taint, so
+  `row = {"id": 1, "note": tainted}` makes `row["note"]` and `row.get("note")` tainted and `row["id"]`
+  clean. `row["k"] = v` updates one key. A `**spread` or computed key, or any value that is not a
+  plain dict literal, falls back to container-level taint. At a branch join two keyed dicts are joined
+  key by key; a keyed dict joined with anything else loses its keys.
 * **try/except** joins the body with every handler; an `except` that exits removes the "exception path"
   from consideration, which is how `try: x = int(x) except ValueError: abort(400)` is understood.
 
@@ -91,7 +95,17 @@ sanitizes      : frozenset[str]      # the function is a thin wrapper around a k
 ```
 
 `sinks_from` is transitive: if `outer(x)` calls `inner(x)` and `inner` has a sink, `outer`'s summary
-records that sink too, so a two-hop flow is reported with the full path.
+records that sink too, so a multi-hop flow is reported with the full path. Pass 1 is repeated over
+all files until no summary changes (capped at 10 rounds). Summaries only grow, so this terminates,
+and the result does not depend on the order functions are defined in.
+
+Pass 1 also records **instance fields**: when a method stores request data in `self.<attr>`, that
+taint is kept per class (`module.Class.attr`). In pass 2, a method that reads `self.<attr>` without
+assigning it first sees the stored taint, so `load()` setting `self.target` from `request.args` and
+`fire()` passing it to `os.system` is reported, with a flow step naming the method that stored it.
+This is flow-insensitive across methods (it does not know whether `load()` runs before `fire()`), so
+these findings are reported at medium confidence. Parameter taint stored on `self` is not recorded
+(it depends on the caller and is already covered by summaries), and inheritance is not followed.
 
 **Pass 2 — report.** Function bodies are analyzed again with real sources (`request.args`, route
 parameters, `sys.argv`). At each call site the summary is consulted: tainted arguments flow to the
@@ -135,17 +149,15 @@ those annotated `int`/`float`/`bool`/`UUID`, which pydantic will have coerced. D
 
 ## What it deliberately does not do
 
-* **Field-sensitive object state across methods.** `self.target = request.args[...]` in one method and
-  `os.system(self.target)` in another is not connected. Doing this well requires a heap model.
+* **A heap model.** Instance fields are tracked per class, not per object, and not through
+  inheritance, aliases (`other = self`) or attributes of non-`self` objects.
 * **Closures capturing outer taint.** An inner `def` that reads an enclosing tainted local is not tracked.
 * **Module globals across requests.** Writing `CACHE["q"]` in one handler and reading it in another.
-* **Key-sensitive containers.** `row = {"id": 1, "note": tainted}` taints the whole dict, so `row["id"]`
-  reads as tainted. This is the one false positive in the benchmark corpus.
-* **Equality chains as allowlists.** `if t == "a": ... elif t == "b": ... else: abort()` is not recognized
-  as a guard (the `not in (...)` form is).
+* **Key-sensitive containers beyond dict literals.** Lists, `dict(...)` calls and dicts built up in
+  loops are tracked as a whole.
 
-Each of these is labeled in `bench/corpus/hard_app.py` as a `known FN`/`known FP` so the score keeps
-them visible instead of hiding them.
+The closure and module-global cases are labeled in `bench/corpus/hard_app.py` as `known FN` so the
+score keeps them visible instead of hiding them.
 
 ## Output
 
