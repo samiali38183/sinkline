@@ -8,7 +8,7 @@
 sinkline is a static analyzer for Python web apps (Flask, FastAPI, Django, aiohttp). It follows
 attacker-controlled input across functions and files and reports it only when it reaches a dangerous
 sink (SQL, shell, `eval`, file paths, redirects, deserialization, ...) without a sanitizer for that
-bug class. I wrote it because pattern linters flag every `cursor.execute` and reviewers stop reading.
+bug class. It exists because pattern linters flag every `cursor.execute` and reviewers stop reading.
 
 | 109 hand-labeled lines in `bench/corpus/` | TP | FP | FN | precision | recall | F1 |
 |---|---|---|---|---|---|---|
@@ -33,7 +33,7 @@ $ sinkline scan vulpy        # fportantier/vulpy @ 5249cc8, first of 3 findings
 ```
 
 The source is in one file and the SQL is built in another. On the same project it reports nothing in
-the `good/` tree, which defines the same function names. The benchmark is small and labeled by me;
+the `good/` tree, which defines the same function names. The benchmark is small and was labeled by the repository author;
 see [Limitations](#limitations) before reading much into it.
 
 ## Contents
@@ -174,7 +174,7 @@ false positive when a `SAFE` line produces any finding. No findings land on unla
   data-flow model. Its 20 false positives are mostly rules that fire on any string-built SQL
   (B608 x10) or any `subprocess` import/call (B603/B607/B602/B605) even on the labeled-safe variants,
   and its misses sit in categories where it has no taint-based rule (labeled SQLi 9, XSS 5, path
-  traversal 5, open redirect 4, command injection 3). I have not benchmarked against Semgrep or
+  traversal 5, open redirect 4, command injection 3). It has not been benchmarked against Semgrep or
   CodeQL.
 
 ### Public projects
@@ -306,7 +306,7 @@ for f in res.findings:
 
 ## Limitations
 
-- **Small, self-labeled benchmark.** 109 lines, labeled by me, and I also wrote the engine. The
+- **Small, self-labeled benchmark.** 109 lines, labeled by the same person who wrote the engine. The
   corpus doubles as a regression suite (the CI floor is the recorded score), so the headline numbers
   are best read as "no regressions, and the design limits are visible", not as a generalization
   estimate. Two of the 0.4.0 changes were written to fix lines in this corpus, which is exactly why

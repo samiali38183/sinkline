@@ -38,6 +38,9 @@ Fixes
   dead expression is removed and that behavior is pinned by tests. Narrowing to returns that contain
   `<` would miss `return request.args["q"]`, which Flask serves as HTML.
 
+Docs
+- README: first-person wording replaced with neutral wording about who labeled the corpus.
+
 Tests
 - Two mutants survived the suite and are now killed: a loop iteration cap of 1 (a value that moves
   between variables inside a loop needs a second round) and a bare-attribute fallback in the
