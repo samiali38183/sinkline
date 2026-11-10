@@ -328,7 +328,7 @@ SANITIZERS: List[Sanitizer] = [
     _san("werkzeug.utils.secure_filename", "CWE-22", note="filename sanitized"),
     _san("os.path.basename", "CWE-22", note="basename only"),
     _san("pathlib.PurePath.name", "CWE-22"),
-    _san("re.escape", "CWE-1333", "CWE-89"),
+    _san("re.escape", "CWE-1333"),
     _san("urllib.parse.quote", "CWE-79", "CWE-918", "CWE-601"),
     _san("urllib.parse.quote_plus", "CWE-79", "CWE-918", "CWE-601"),
     _san("ldap.filter.escape_filter_chars", "CWE-90"),

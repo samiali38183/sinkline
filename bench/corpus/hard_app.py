@@ -125,7 +125,7 @@ def c3():
         pass
     else:
         abort(400)
-    db.execute("SELECT * FROM " + tbl)                                         # SAFE -- known FP (equality chain across elif/else not merged into a guard)
+    db.execute("SELECT * FROM " + tbl)                                         # SAFE (if/elif equality chain with else: abort() is a guard)
     return "ok"
 
 

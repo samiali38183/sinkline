@@ -50,6 +50,7 @@ _SOURCES, _SINKS, _SANITIZERS = build_indexes()
 
 MAX_LOOP_ROUNDS = 3
 MAX_FLOW_STEPS = 24
+MAX_SUMMARY_ROUNDS = 10
 
 
 # ---------------------------------------------------------------------------
@@ -1066,10 +1067,12 @@ class FileAnalyzer(ast.NodeVisitor):
             if self.collect:
                 summ = self.current_summary
                 if summ is not None:
+                    inner = InnerSink(sink, self.path, node.lineno, node.col_offset, self.text(node), self.current_fn or "")
                     for lab in hit.labels:
                         if lab.startswith("param:"):
-                            summ.sinks_from.setdefault(int(lab.split(":")[1]), []).append(
-                                InnerSink(sink, self.path, node.lineno, node.col_offset, self.text(node), self.current_fn or ""))
+                            bucket = summ.sinks_from.setdefault(int(lab.split(":")[1]), [])
+                            if inner not in bucket:
+                                bucket.append(inner)
             else:
                 self._report_sink(sink, node, hit, node)
             break  # one finding per call per sink group
@@ -1164,6 +1167,18 @@ def scan_path(path: str, exclude_tests: bool = False) -> ScanResult:
     return res
 
 
+def _summary_state(summaries: Dict[str, Summary]) -> List[tuple]:
+    """A comparable snapshot of every distinct summary, used to detect the pass-1 fixpoint."""
+    out = []
+    for key in sorted(summaries):
+        s = summaries[key]
+        if s is None:
+            continue
+        out.append((key, frozenset(s.returns_from), s.returns_source, s.sanitizes,
+                    tuple(sorted((i, len(v)) for i, v in s.sinks_from.items()))))
+    return out
+
+
 def _scan(items: List[Tuple[str, str]]) -> ScanResult:
     trees: List[Tuple[str, str, ast.Module]] = []
     errors: List[str] = []
@@ -1174,11 +1189,17 @@ def _scan(items: List[Tuple[str, str]]) -> ScanResult:
             errors.append(f"{name}: {e.msg} (line {e.lineno})")
 
     summaries: Dict[str, Summary] = {}
-    # Pass 1: summaries (two rounds so callee-of-callee flows settle)
-    for _ in range(2):
+    # Pass 1: summaries, re-run until no summary changes. Summaries only grow (sets of param
+    # indexes and sink sites), so this terminates; the cap is a guard against pathological input.
+    prev = None
+    for _ in range(MAX_SUMMARY_ROUNDS):
         for name, src, tree in trees:
             fa = FileAnalyzer(name, src, tree, summaries, collect=True)
             fa.visit(tree)
+        state = _summary_state(summaries)
+        if state == prev:
+            break
+        prev = state
     # Pass 2: report
     findings: List[Finding] = []
     nfunc = sum(1 for s in summaries.values())

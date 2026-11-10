@@ -262,6 +262,54 @@ def test_two_hop_sink():
     assert r == {12: {"CWE-89"}}
 
 
+
+def test_deep_helper_chain_defined_caller_first():
+    # summaries are computed to a fixpoint, so a chain longer than the old two fixed
+    # rounds is found even when every helper is defined before its callee
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        h0(request.args['x'])
+    def h0(a):
+        h1(a)
+    def h1(b):
+        h2(b)
+    def h2(c):
+        h3(c)
+    def h3(d):
+        os.system(d)
+    """)
+    assert r == {8: {"CWE-78"}}
+
+
+def test_re_escape_is_not_a_sql_sanitizer():
+    r = cwes_by_line(FLASK + """
+    import re
+    @app.route('/')
+    def v():
+        q = re.escape(request.args['q'])
+        db.execute("SELECT * FROM t WHERE n = '" + q + "'")
+        re.search(q, "haystack")
+    """)
+    assert r == {10: {"CWE-89"}}
+
+
+def test_elif_equality_chain_with_else_abort_is_a_guard():
+    r = cwes_by_line(FLASK + """
+    from flask import abort
+    @app.route('/')
+    def v():
+        t = request.args['t']
+        if t == "users":
+            pass
+        elif t == "orders":
+            pass
+        else:
+            abort(400)
+        db.execute("SELECT * FROM " + t)
+    """)
+    assert r == {}
+
 def test_user_sanitizer_wrapper():
     r = cwes_by_line(FLASK + """
     from werkzeug.utils import secure_filename
