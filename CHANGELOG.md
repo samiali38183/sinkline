@@ -3,8 +3,9 @@
 ## 0.4.1 (2026-11-10)
 
 Benchmark (`python bench/score.py`): recall 0.967 to 0.984, F1 0.983 to 0.992 (TP 59 to 60, FN 2 to 1);
-precision stays 1.000 (FP 0). Tests 46 to 91. Public-project results in the README were not re-run for
-this release.
+precision stays 1.000 (FP 0). Tests 46 to 91. The four public projects in the README were re-scanned
+at their pinned commits with this release: vulpy, Vulnerable-Flask-App and dvpwa produce output identical to
+`docs/examples/`, and microblog still produces 0 findings.
 
 Security
 - GitHub Action: inputs (`path`, `fail-on`, `min-confidence`) were interpolated straight into a shell
