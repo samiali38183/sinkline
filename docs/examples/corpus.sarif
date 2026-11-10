@@ -6,9 +6,9 @@
       "tool": {
         "driver": {
           "name": "sinkline",
-          "version": "0.3.0",
+          "version": "0.4.0",
           "informationUri": "https://github.com/samiali38183/sinkline",
-          "semanticVersion": "0.3.0",
+          "semanticVersion": "0.4.0",
           "rules": [
             {
               "id": "SL-SQLI-001",
@@ -3388,30 +3388,12 @@
                             "uriBaseId": "%SRCROOT%"
                           },
                           "region": {
-                            "startLine": 60,
-                            "startColumn": 5
-                          }
-                        },
-                        "message": {
-                          "text": "propagate: assigned to `params`"
-                        }
-                      },
-                      "importance": "important"
-                    },
-                    {
-                      "location": {
-                        "physicalLocation": {
-                          "artifactLocation": {
-                            "uri": "hard_app.py",
-                            "uriBaseId": "%SRCROOT%"
-                          },
-                          "region": {
                             "startLine": 61,
-                            "startColumn": 16
+                            "startColumn": 48
                           }
                         },
                         "message": {
-                          "text": "propagate: concat"
+                          "text": "propagate: ['name']"
                         }
                       },
                       "importance": "important"
@@ -3564,122 +3546,6 @@
             "cwe": "CWE-78",
             "source": "flask.request.args",
             "sink": "subprocess.run"
-          }
-        },
-        {
-          "ruleId": "SL-SQLI-001",
-          "ruleIndex": 0,
-          "level": "error",
-          "message": {
-            "text": "SQL built from tainted data: flask.request.form reaches sqlite3.Connection.execute without a sanitizer for CWE-89. Fix: Use parameterized queries: conn.execute('... WHERE id = ?', (user_id,))"
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "hard_app.py",
-                  "uriBaseId": "%SRCROOT%"
-                },
-                "region": {
-                  "startLine": 84,
-                  "startColumn": 5,
-                  "endLine": 84,
-                  "endColumn": 56
-                }
-              }
-            }
-          ],
-          "codeFlows": [
-            {
-              "threadFlows": [
-                {
-                  "locations": [
-                    {
-                      "location": {
-                        "physicalLocation": {
-                          "artifactLocation": {
-                            "uri": "hard_app.py",
-                            "uriBaseId": "%SRCROOT%"
-                          },
-                          "region": {
-                            "startLine": 83,
-                            "startColumn": 29
-                          }
-                        },
-                        "message": {
-                          "text": "source: flask.request.form"
-                        }
-                      },
-                      "importance": "essential"
-                    },
-                    {
-                      "location": {
-                        "physicalLocation": {
-                          "artifactLocation": {
-                            "uri": "hard_app.py",
-                            "uriBaseId": "%SRCROOT%"
-                          },
-                          "region": {
-                            "startLine": 83,
-                            "startColumn": 5
-                          }
-                        },
-                        "message": {
-                          "text": "propagate: assigned to `row`"
-                        }
-                      },
-                      "importance": "important"
-                    },
-                    {
-                      "location": {
-                        "physicalLocation": {
-                          "artifactLocation": {
-                            "uri": "hard_app.py",
-                            "uriBaseId": "%SRCROOT%"
-                          },
-                          "region": {
-                            "startLine": 84,
-                            "startColumn": 16
-                          }
-                        },
-                        "message": {
-                          "text": "propagate: %-format"
-                        }
-                      },
-                      "importance": "important"
-                    },
-                    {
-                      "location": {
-                        "physicalLocation": {
-                          "artifactLocation": {
-                            "uri": "hard_app.py",
-                            "uriBaseId": "%SRCROOT%"
-                          },
-                          "region": {
-                            "startLine": 84,
-                            "startColumn": 5
-                          }
-                        },
-                        "message": {
-                          "text": "sink: sqlite3.Connection.execute"
-                        }
-                      },
-                      "importance": "essential"
-                    }
-                  ]
-                }
-              ]
-            }
-          ],
-          "partialFingerprints": {
-            "sinkline/v1": "e4d15710f375e5ce"
-          },
-          "properties": {
-            "confidence": "high",
-            "owasp": "A03:2021",
-            "cwe": "CWE-89",
-            "source": "flask.request.form",
-            "sink": "sqlite3.Connection.execute"
           }
         },
         {
@@ -4126,6 +3992,140 @@
             "cwe": "CWE-89",
             "source": "flask.request.args",
             "sink": "sqlite3.Connection.execute"
+          }
+        },
+        {
+          "ruleId": "SL-CMDI-001",
+          "ruleIndex": 6,
+          "level": "error",
+          "message": {
+            "text": "OS command built from tainted data: flask.request.args reaches os.system without a sanitizer for CWE-78. Fix: Use subprocess.run([...], shell=False) with an argument list."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "hard_app.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 183,
+                  "startColumn": 9,
+                  "endLine": 183,
+                  "endColumn": 41
+                }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 180,
+                            "startColumn": 23
+                          }
+                        },
+                        "message": {
+                          "text": "source: flask.request.args"
+                        }
+                      },
+                      "importance": "essential"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 180,
+                            "startColumn": 23
+                          }
+                        },
+                        "message": {
+                          "text": "propagate: .get()"
+                        }
+                      },
+                      "importance": "important"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 180,
+                            "startColumn": 9
+                          }
+                        },
+                        "message": {
+                          "text": "propagate: stored in `self.target` by Handler.load()"
+                        }
+                      },
+                      "importance": "important"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 183,
+                            "startColumn": 29
+                          }
+                        },
+                        "message": {
+                          "text": "propagate: read `self.target` in Handler.fire()"
+                        }
+                      },
+                      "importance": "important"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 183,
+                            "startColumn": 9
+                          }
+                        },
+                        "message": {
+                          "text": "sink: os.system"
+                        }
+                      },
+                      "importance": "essential"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "sinkline/v1": "c6c40c7581732267"
+          },
+          "properties": {
+            "confidence": "medium",
+            "owasp": "A03:2021",
+            "cwe": "CWE-78",
+            "source": "flask.request.args",
+            "sink": "os.system"
           }
         },
         {
