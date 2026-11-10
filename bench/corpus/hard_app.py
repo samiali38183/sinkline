@@ -81,7 +81,7 @@ def k3():
 @app.route("/k4")
 def k4():
     row = {"id": 1, "note": request.form["note"]}
-    db.execute("INSERT INTO t VALUES (%d)" % row["id"])                        # SAFE -- known FP (container-level taint, not key-sensitive)
+    db.execute("INSERT INTO t VALUES (%d)" % row["id"])                        # SAFE (key-sensitive dict literal: "id" is a constant)
     return "ok"
 
 

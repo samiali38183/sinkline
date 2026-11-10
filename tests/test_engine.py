@@ -460,3 +460,47 @@ def test_fingerprint_stable_across_line_shift():
 def test_syntax_error_is_reported_not_raised():
     res = scan_source("def (:\n", "bad.py")
     assert res.errors and not res.findings
+
+
+# ---- key-sensitive dict literals ----------------------------------------------
+
+def test_dict_literal_clean_key_is_not_tainted():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        row = {"id": 1, "note": request.form["note"]}
+        db.execute("INSERT INTO t VALUES (%d)" % row["id"])
+        db.execute("SELECT " + row.get("id", ""))
+        db.execute("SELECT " + row["note"])
+        db.execute("SELECT " + row.get("note"))
+    """)
+    assert r == {11: {"CWE-89"}, 12: {"CWE-89"}}
+
+
+def test_dict_literal_key_store_and_branch_merge():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        d = {"a": "x", "b": request.args["b"]}
+        d["a"] = request.args["a"]
+        os.system(d["a"])
+        e = {"k": "safe", "t": request.args["t"]}
+        if request.args.get("flip"):
+            e = {"k": request.args["k"], "t": "safe"}
+        os.system(e["k"])
+    """)
+    assert r == {10: {"CWE-78"}, 14: {"CWE-78"}}
+
+
+def test_dict_without_constant_keys_stays_container_level():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        extra = {"n": request.args["n"]}
+        d = {"id": 1, **extra}
+        db.execute("SELECT %s" % d["id"])
+        k = request.args["k"]
+        e = {k: 1}
+        db.execute("SELECT %s" % e["x"])
+    """)
+    assert r == {10: {"CWE-89"}, 13: {"CWE-89"}}

@@ -18,8 +18,8 @@ Design (what an interviewer will ask about):
   are recognized; inside the guarded branch (or after an early return) the name is treated as
   sanitized. This is the single biggest false-positive killer on real code.
 * **Field sensitivity.** `request.args` is tainted; `request.method` is not. Dict/attr access on
-  a tainted value stays tainted; access on a container that merely *holds* a tainted value is
-  tainted unless we can prove the key is a different constant (we don't try - conservative).
+  a tainted value stays tainted. A dict literal with constant string keys keeps per-key taint
+  (`{"id": 1, "note": t}["id"]` is clean); anything else falls back to the whole container.
 * **Sink gates.** `subprocess.run(cmd, shell=True)` fires; `shell=False` doesn't.
   `yaml.load(x)` fires unless `Loader=SafeLoader`. `torch.load(p)` fires unless weights_only=True.
 
@@ -62,6 +62,8 @@ class Taint:
     labels: FrozenSet[str]                 # source labels
     cleared: FrozenSet[str] = frozenset()  # CWEs sanitized along the way ("*" = all)
     trail: Tuple[FlowStep, ...] = ()       # provenance
+    # per-key taint for dict literals with constant string keys; None = not key-sensitive
+    keys: Optional[Tuple[Tuple[str, "Taint"], ...]] = None
 
     def __bool__(self) -> bool:
         return bool(self.labels) and "*" not in self.cleared
@@ -76,14 +78,39 @@ class Taint:
             return other
         # merging: a value is only cleared for a CWE if BOTH paths cleared it
         trail = self.trail if len(self.trail) >= len(other.trail) else other.trail
-        return Taint(self.labels | other.labels, self.cleared & other.cleared, trail)
+        keys = None
+        if self.keys is not None and other.keys is not None:
+            a, b = dict(self.keys), dict(other.keys)
+            keys = tuple((k, a.get(k, EMPTY).union(b.get(k, EMPTY))) for k in sorted(set(a) | set(b)))
+        return Taint(self.labels | other.labels, self.cleared & other.cleared, trail, keys)
 
     def step(self, s: FlowStep) -> "Taint":
         if len(self.trail) >= MAX_FLOW_STEPS:
             return self
         if self.trail and self.trail[-1].line == s.line and self.trail[-1].file == s.file and self.trail[-1].kind == s.kind:
             return self
-        return Taint(self.labels, self.cleared, self.trail + (s,))
+        return Taint(self.labels, self.cleared, self.trail + (s,), self.keys)
+
+    def plain(self) -> "Taint":
+        """The same taint without per-key detail (for values derived from a dict, not the dict itself)."""
+        return self if self.keys is None else Taint(self.labels, self.cleared, self.trail)
+
+    def key(self, name: str) -> Optional["Taint"]:
+        """Taint of `d[name]` if this is a key-sensitive dict that has that key, else None."""
+        if self.keys is None:
+            return None
+        for k, v in self.keys:
+            if k == name:
+                return v
+        return None
+
+    def with_key(self, name: str, value: "Taint") -> "Taint":
+        """Copy with `d[name] = value` applied; the container labels only grow."""
+        base = self.union(value.plain()) if value else self
+        if self.keys is None:
+            return base
+        keys = tuple(sorted({**dict(self.keys), name: value}.items()))
+        return Taint(base.labels, base.cleared, base.trail, keys)
 
     def sanitize(self, cwes: FrozenSet[str], s: FlowStep) -> "Taint":
         return Taint(self.labels, self.cleared | cwes, self.trail + (s,))
@@ -120,6 +147,13 @@ class InnerSink:
     col: int
     text: str
     fn: str
+
+
+def _const_key(node: Optional[ast.AST]) -> Optional[str]:
+    """'k' for a constant string subscript or dict key, else None."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -432,9 +466,15 @@ class FileAnalyzer(ast.NodeVisitor):
                     self.env[key] = t.step(self.fs(node, "propagate", f"stored in `{key}`")) if t else t
                 else:
                     cur = self.get(root)
-                    merged = cur.union(t)
-                    if t:
-                        merged = merged.step(self.fs(node, "propagate", f"stored into `{root}`"))
+                    ck = _const_key(tgt.slice) if isinstance(tgt, ast.Subscript) and isinstance(tgt.value, ast.Name) else None
+                    if ck is not None and cur.keys is not None:
+                        # d["k"] = value on a key-sensitive dict: update that key only
+                        kv = t.step(self.fs(node, "propagate", f"stored into `{root}[{ck!r}]`")) if t else t
+                        merged = cur.with_key(ck, kv)
+                    else:
+                        merged = cur.union(t.plain())
+                        if t:
+                            merged = merged.step(self.fs(node, "propagate", f"stored into `{root}`"))
                     self.env[root] = merged
             # flask.session[...] = tainted
             q = self.qual(tgt.value) if isinstance(tgt, ast.Subscript) else None
@@ -764,22 +804,27 @@ class FileAnalyzer(ast.NodeVisitor):
         st = self._source_taint(q, node)
         if st:
             return st.step(self.fs(node, "source", f"{q}[...]"))
+        ck = _const_key(node.slice)
+        if ck is not None:
+            kt = base.key(ck)
+            if kt is not None:
+                return kt.step(self.fs(node, "propagate", f"[{ck!r}]")) if kt else EMPTY
         if base:
-            return base
+            return base.plain()
         return EMPTY
 
     def e_JoinedStr(self, node: ast.JoinedStr) -> Taint:
         t = EMPTY
         for v in node.values:
             if isinstance(v, ast.FormattedValue):
-                t = t.union(self.eval(v.value))
+                t = t.union(self.eval(v.value).plain())
         if t:
             t = t.step(self.fs(node, "propagate", "f-string"))
         return t
 
     def e_BinOp(self, node: ast.BinOp) -> Taint:
         l, r = self.eval(node.left), self.eval(node.right)
-        t = l.union(r)
+        t = l.union(r).plain()
         if t:
             op = "%-format" if isinstance(node.op, ast.Mod) else "concat"
             t = t.step(self.fs(node, "propagate", op))
@@ -840,10 +885,20 @@ class FileAnalyzer(ast.NodeVisitor):
 
     def e_Dict(self, node: ast.Dict) -> Taint:
         t = EMPTY
+        per_key: Dict[str, Taint] = {}
+        keyed = True
         for k, v in zip(node.keys, node.values):
+            vt = self.eval(v)
             if k is not None:
                 t = t.union(self.eval(k))
-            t = t.union(self.eval(v))
+            ck = _const_key(k) if k is not None else None
+            if ck is None:
+                keyed = False  # **spread or computed key: fall back to container-level taint
+            else:
+                per_key[ck] = vt
+            t = t.union(vt.plain())
+        if t and keyed:
+            return Taint(t.labels, t.cleared, t.trail, tuple(sorted(per_key.items())))
         return t
 
     def _source_taint(self, q: Optional[str], node: ast.AST) -> Taint:
@@ -872,6 +927,7 @@ class FileAnalyzer(ast.NodeVisitor):
             any_arg = any_arg.union(a)
         for a in kw_taints.values():
             any_arg = any_arg.union(a)
+        any_arg = any_arg.plain()
 
         # 1. sanitizer?
         san = self.lookup_sanitizer(func_q)
@@ -907,6 +963,17 @@ class FileAnalyzer(ast.NodeVisitor):
         recv_t = EMPTY
         if isinstance(node.func, ast.Attribute):
             recv_t = self.eval(node.func.value)
+            # d.get("k", default) / d.pop("k") on a key-sensitive dict
+            if recv_t.keys is not None and node.func.attr in {"get", "pop"} and node.args:
+                ck = _const_key(node.args[0])
+                kt = recv_t.key(ck) if ck is not None else None
+                if kt is not None:
+                    out = kt
+                    for extra in arg_taints[1:]:
+                        out = out.union(extra)
+                    out = out.plain()
+                    return out.step(self.fs(node, "propagate", f".{node.func.attr}({ck!r})")) if out else EMPTY
+            recv_t = recv_t.plain()
             if recv_t and node.func.attr in STR_PROPAGATING_METHODS:
                 out = recv_t.union(any_arg)
                 return out.step(self.fs(node, "propagate", f".{node.func.attr}()"))
