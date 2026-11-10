@@ -13,10 +13,11 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Dict
 
 from . import __version__
 from .engine import scan_path
-from .model import CWE_TO_NAME, OWASP_NAMES, SINKS
+from .model import CWE_TO_NAME, OWASP_NAMES, SINKS, Sink
 from .report import to_html, to_json, to_sarif, to_text
 
 _SEV = ["low", "medium", "high", "critical"]
@@ -68,7 +69,7 @@ def _cmd_scan(a: argparse.Namespace) -> int:
 
 
 def _cmd_rules(a: argparse.Namespace) -> int:
-    seen = {}
+    seen: Dict[str, Sink] = {}
     for s in SINKS:
         seen.setdefault(s.rule_id, s)
     rows = sorted(seen.values(), key=lambda s: (s.owasp, s.rule_id))

@@ -8,7 +8,7 @@ second lookup. Qualified names are matched after import resolution, so
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, FrozenSet, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------

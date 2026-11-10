@@ -35,3 +35,17 @@ include = ["sinkline*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 160
+# the corpus is deliberately vulnerable sample code, not part of the tool
+extend-exclude = ["bench/corpus"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = ["B905"]  # zip(strict=) needs 3.10+
+
+[tool.mypy]
+python_version = "3.9"
+files = ["sinkline"]

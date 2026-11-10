@@ -8,7 +8,6 @@ import json
 from typing import Dict, List
 
 from .engine import ScanResult
-from .finding import Finding
 from .model import CWE_TO_NAME, OWASP_NAMES, SINKS
 
 _SEV_SARIF = {"critical": "error", "high": "error", "medium": "warning", "low": "note"}

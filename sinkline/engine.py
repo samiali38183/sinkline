@@ -37,7 +37,7 @@ import ast
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
+from typing import Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, Union
 
 from .finding import Finding, FlowStep
 from .model import (
@@ -45,7 +45,6 @@ from .model import (
     STR_PROPAGATING_METHODS,
     Sanitizer,
     Sink,
-    Source,
     build_indexes,
 )
 from .resolve import Resolver, Scope
@@ -212,7 +211,7 @@ class FileAnalyzer(ast.NodeVisitor):
         return [".".join(parts[i:]) for i in range(len(parts))]
     def text(self, node: ast.AST) -> str:
         try:
-            return self.lines[node.lineno - 1].strip()
+            return self.lines[getattr(node, "lineno", 0) - 1].strip()
         except Exception:  # pragma: no cover
             return ""
 
@@ -263,7 +262,7 @@ class FileAnalyzer(ast.NodeVisitor):
         self.class_stack.pop()
 
     # -- functions -----------------------------------------------------------
-    def _fn_key(self, node: ast.AST) -> str:
+    def _fn_key(self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> str:
         return ".".join(self.class_stack + [node.name]) if self.class_stack else node.name
 
     def _decorator_quals(self, node) -> List[str]:
@@ -392,7 +391,7 @@ class FileAnalyzer(ast.NodeVisitor):
                 else:
                     summ.returns_source = True
             # does this function look like a sanitizer wrapper? (returns the result of a sanitizer applied to a param)
-            if t.cleared and t.labels and all(l.startswith("param:") for l in t.labels):
+            if t.cleared and t.labels and all(lab.startswith("param:") for lab in t.labels):
                 summ.sanitizes = t.cleared
         if not self.collect and self.in_http_view and t and self._returns_html(node.value, t):
             self._report_sink(_SINKS["__return_http__"][0], node, t, node.value)
@@ -515,8 +514,8 @@ class FileAnalyzer(ast.NodeVisitor):
         key = self._field_key(tgt)
         if key is None:
             return
-        cls = ".".join(self.class_stack)
-        step = self.fs(node, "propagate", f"stored in `self.{key.rsplit('.', 1)[1]}` by {cls}.{self.current_fn.rsplit('.', 1)[-1]}()")
+        method = (self.current_fn or "").rsplit(".", 1)[-1]
+        step = self.fs(node, "propagate", f"stored in `self.{key.rsplit('.', 1)[1]}` by {'.'.join(self.class_stack)}.{method}()")
         stored = Taint(real | {"~field"}, t.cleared, t.trail + (step,))
         cur = self.fields.get(key)
         if cur is None or not (stored.labels <= cur.labels and cur.cleared <= stored.cleared):
@@ -547,7 +546,7 @@ class FileAnalyzer(ast.NodeVisitor):
         for s in node.orelse:
             self.visit(s)
 
-    visit_AsyncFor = visit_For
+    visit_AsyncFor = visit_For  # type: ignore[assignment]
 
     def visit_While(self, node: ast.While) -> None:
         self.eval(node.test)
@@ -581,7 +580,7 @@ class FileAnalyzer(ast.NodeVisitor):
         for s in node.body:
             self.visit(s)
 
-    visit_AsyncWith = visit_With
+    visit_AsyncWith = visit_With  # type: ignore[assignment]
 
     def visit_If(self, node: ast.If) -> None:
         self.eval(node.test)
@@ -790,7 +789,7 @@ class FileAnalyzer(ast.NodeVisitor):
         for s in node.orelse + node.finalbody:
             self.visit(s)
 
-    visit_TryStar = visit_Try
+    visit_TryStar = visit_Try  # type: ignore[assignment]
 
     def visit_Match(self, node: ast.Match) -> None:  # pragma: no cover
         self.eval(node.subject)
@@ -870,8 +869,8 @@ class FileAnalyzer(ast.NodeVisitor):
         return t
 
     def e_BinOp(self, node: ast.BinOp) -> Taint:
-        l, r = self.eval(node.left), self.eval(node.right)
-        t = l.union(r).plain()
+        lt, rt = self.eval(node.left), self.eval(node.right)
+        t = lt.union(rt).plain()
         if t:
             op = "%-format" if isinstance(node.op, ast.Mod) else "concat"
             t = t.step(self.fs(node, "propagate", op))
@@ -1204,9 +1203,9 @@ class FileAnalyzer(ast.NodeVisitor):
         self._emit(inner.sink, call, t, flow, inside=inner.fn or summ.name, sink_line=inner.line, sink_file=inner.file)
 
     def _emit(self, sink: Sink, node: ast.AST, t: Taint, flow: List[FlowStep], inside: Optional[str] = None, sink_line: Optional[int] = None, sink_file: Optional[str] = None) -> None:
-        labels = sorted(l for l in t.labels if not l.startswith("param:"))
+        labels = sorted(lab for lab in t.labels if not lab.startswith("param:"))
         unknown = "~unknown-call" in t.labels or "~field" in t.labels
-        labels = [l for l in labels if l not in ("~unknown-call", "~field")]
+        labels = [lab for lab in labels if lab not in ("~unknown-call", "~field")]
         src = ", ".join(labels) or "parameter"
         conf = "high"
         if unknown:
@@ -1218,12 +1217,13 @@ class FileAnalyzer(ast.NodeVisitor):
         where = f" (inside {inside}, {sink_file or self.path}:{sink_line})" if inside else ""
         msg = f"{src} reaches {sink.qualname}{where} without a sanitizer for {sink.cwe}."
         fp = hashlib.sha1(f"{sink.rule_id}|{self.path}|{self.current_fn}|{self.text(node)}".encode()).hexdigest()[:16]
+        line, col = getattr(node, "lineno", 0), getattr(node, "col_offset", 0)
         f = Finding(
             rule_id=sink.rule_id, owasp=sink.owasp, cwe=sink.cwe, title=sink.title,
             severity=sink.severity, confidence=conf, file=self.path,
-            line=node.lineno, col=node.col_offset + 1,
-            end_line=getattr(node, "end_lineno", node.lineno) or node.lineno,
-            end_col=(getattr(node, "end_col_offset", node.col_offset) or node.col_offset) + 1,
+            line=line, col=col + 1,
+            end_line=getattr(node, "end_lineno", line) or line,
+            end_col=(getattr(node, "end_col_offset", col) or col) + 1,
             sink=sink.qualname, source=src, message=msg, flow=flow, fix=sink.fix, fingerprint=fp,
         )
         if not any(x.fingerprint == fp for x in self.findings):
