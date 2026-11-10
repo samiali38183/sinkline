@@ -411,10 +411,8 @@ class FileAnalyzer(ast.NodeVisitor):
                 return True
             return False
         # f-string / concat / % formatting / plain tainted name
-        if isinstance(value, (ast.JoinedStr, ast.BinOp, ast.Name, ast.Attribute, ast.Subscript)):
-            src = self.text(value)
-            return "<" in src or isinstance(value, (ast.JoinedStr, ast.BinOp)) or True
-        return False
+        # Flask and Django serve a returned str as text/html, so a bare tainted value is XSS too.
+        return isinstance(value, (ast.JoinedStr, ast.BinOp, ast.Name, ast.Attribute, ast.Subscript))
 
     # -- statements ----------------------------------------------------------
     def visit_Assign(self, node: ast.Assign) -> None:

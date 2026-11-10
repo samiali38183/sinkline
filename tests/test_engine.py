@@ -624,3 +624,34 @@ def test_try_else_and_finally_run_after_join():
             os.system("ping " + host)
     """)
     assert r == {14: {"CWE-78"}}
+
+
+# ---- what a returned value counts as HTML ------------------------------------
+
+@pytest.mark.parametrize("ret", [
+    'request.args["q"]',            # bare subscript, no "<" anywhere in the source text
+    'name',                         # plain tainted name
+    '"<b>" + name',                 # concatenation
+    'f"{name}"',                    # f-string with no markup
+    'str(name)',
+])
+def test_returned_tainted_string_is_xss(ret):
+    r = cwes_by_line(FLASK + f"""
+    @app.route('/')
+    def v():
+        name = request.args["q"]
+        return {ret}
+    """)
+    assert r == {9: {"CWE-79"}}
+
+
+@pytest.mark.parametrize("ret", ["{'q': name}", "[name]", "(name, 200)", "jsonify(name)", "redirect(name)"])
+def test_returned_json_like_value_is_not_xss(ret):
+    r = cwes_by_line(FLASK + f"""
+    from flask import jsonify
+    @app.route('/')
+    def v():
+        name = request.args["q"]
+        return {ret}
+    """)
+    assert not any("CWE-79" in cs for cs in r.values())
