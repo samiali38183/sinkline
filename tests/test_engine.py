@@ -691,3 +691,63 @@ def test_exclude_tests_ignores_directories_above_the_root(tmp_path):
 
 def test_without_flag_test_files_are_scanned(tmp_path):
     assert _scanned(tmp_path, ["tests/a.py", "app.py"], exclude=False) == ["app.py", "tests/a.py"]
+
+
+# ---- tests added to kill surviving mutants ------------------------------------
+
+def test_loop_needs_second_round():
+    # `c = b` reads the value `b` had at the end of the previous iteration, so the taint
+    # only reaches `c` on the second pass over the body (MAX_LOOP_ROUNDS = 1 would miss it)
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        a = request.args["x"]
+        b = ""
+        c = ""
+        for i in range(3):
+            c = b
+            b = a
+        os.system("echo " + c)
+    """)
+    assert r == {14: {"CWE-78"}}
+
+
+def test_loop_needs_third_round():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        a = request.args["x"]
+        b = ""
+        c = ""
+        d = ""
+        for i in range(3):
+            d = c
+            c = b
+            b = a
+        os.system("echo " + d)
+    """)
+    assert r == {16: {"CWE-78"}}
+
+
+def test_attribute_call_never_resolves_to_same_named_user_function():
+    # `asyncio.run` is not a sink, so nothing but _summary_for can connect it to `def run`
+    r = cwes_by_line(FLASK + """
+    import asyncio
+    def run(cmd):
+        os.system(cmd)
+    @app.route('/')
+    def v():
+        asyncio.run(request.args["c"])
+    """)
+    assert r == {}
+
+
+def test_plain_name_call_still_resolves_to_user_function():
+    r = cwes_by_line(FLASK + """
+    def run(cmd):
+        os.system(cmd)
+    @app.route('/')
+    def v():
+        run(request.args["c"])
+    """)
+    assert [c for cs in r.values() for c in cs] == ["CWE-78"]

@@ -27,6 +27,12 @@ Fixes
   dead expression is removed and that behavior is pinned by tests. Narrowing to returns that contain
   `<` would miss `return request.args["q"]`, which Flask serves as HTML.
 
+Tests
+- Two mutants survived the suite and are now killed: a loop iteration cap of 1 (a value that moves
+  between variables inside a loop needs a second round) and a bare-attribute fallback in the
+  function-summary lookup (`asyncio.run(x)` must not resolve to a user function named `run`). Each new
+  test was checked to fail with the mutant applied.
+
 ## 0.4.0 (2026-11-10)
 
 Benchmark (`python bench/score.py`): precision 0.983 to 1.000, recall 0.951 to 0.967, F1 0.967 to
