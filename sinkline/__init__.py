@@ -9,5 +9,5 @@ Public surface:
 from .engine import scan_path, scan_source, ScanResult
 from .finding import Finding, FlowStep
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 __all__ = ["scan_path", "scan_source", "ScanResult", "Finding", "FlowStep", "__version__"]
