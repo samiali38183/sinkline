@@ -34,6 +34,7 @@ constructor tracking, no alias tracking through mutable containers (`lst.append(
 from __future__ import annotations
 
 import ast
+import fnmatch
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -303,10 +304,8 @@ class FileAnalyzer(ast.NodeVisitor):
     def _function(self, node) -> None:
         key = self._fn_key(node)
         saved = (self.env, self.scope, self.current_fn, self.current_summary, self.param_index, self.in_http_view, self.guards)
-        self.env = {}
-        self.guards = {}
-        self.scope = Scope(self.scope)
-        self.current_fn = key
+        # a nested def sees the enclosing function's taint (pass 2 only: in pass 1 the outer env
+        # holds `param:N` labels of the OUTER function, which would corrupt the inner summary)
         args = node.args
         names = [a.arg for a in args.posonlyargs + args.args]
         if args.vararg:
@@ -314,6 +313,12 @@ class FileAnalyzer(ast.NodeVisitor):
         names += [a.arg for a in args.kwonlyargs]
         if args.kwarg:
             names.append(args.kwarg.arg)
+        # a parameter shadows an outer variable of the same name, so it is not inherited
+        outer = {k: v for k, v in saved[0].items() if k not in names} if (saved[2] is not None and not self.collect) else {}
+        self.env = dict(outer)
+        self.guards = {}
+        self.scope = Scope(self.scope)
+        self.current_fn = key
         self.param_index = {n: i for i, n in enumerate(names)}
 
         decos = self._decorator_quals(node)
@@ -411,10 +416,8 @@ class FileAnalyzer(ast.NodeVisitor):
                 return True
             return False
         # f-string / concat / % formatting / plain tainted name
-        if isinstance(value, (ast.JoinedStr, ast.BinOp, ast.Name, ast.Attribute, ast.Subscript)):
-            src = self.text(value)
-            return "<" in src or isinstance(value, (ast.JoinedStr, ast.BinOp)) or True
-        return False
+        # Flask and Django serve a returned str as text/html, so a bare tainted value is XSS too.
+        return isinstance(value, (ast.JoinedStr, ast.BinOp, ast.Name, ast.Attribute, ast.Subscript))
 
     # -- statements ----------------------------------------------------------
     def visit_Assign(self, node: ast.Assign) -> None:
@@ -780,13 +783,37 @@ class FileAnalyzer(ast.NodeVisitor):
             return node.attr.isupper()
         return False
 
+    @staticmethod
+    def _join_envs(a: Dict[str, Taint], b: Dict[str, Taint]) -> Dict[str, Taint]:
+        return {k: a.get(k, EMPTY).union(b.get(k, EMPTY)) for k in set(a) | set(b)}
+
     def visit_Try(self, node: ast.Try) -> None:
+        """Taint after try/except is the join of every path that reaches the statement after it.
+
+        Paths: the try body (plus `else`) running to completion, and each handler that does not
+        exit. A handler starts from the join of every state the body passed through, because an
+        exception can be raised after any statement of the body.
+        """
+        pre_guards = dict(self.guards)
+        entry = dict(self.env)
         for s in node.body:
             self.visit(s)
+            entry = self._join_envs(entry, self.env)
+        for s in node.orelse:
+            self.visit(s)
+        outcomes = [(self.env, self.guards)]
         for h in node.handlers:
+            self.env, self.guards = dict(entry), dict(pre_guards)
             for s in h.body:
                 self.visit(s)
-        for s in node.orelse + node.finalbody:
+            if not self._block_exits(h.body):
+                outcomes.append((self.env, self.guards))
+        env, guards = outcomes[0]
+        for e, g in outcomes[1:]:
+            env = self._join_envs(env, e)
+            guards = {k: v & g[k] for k, v in guards.items() if k in g}
+        self.env, self.guards = env, guards
+        for s in node.finalbody:
             self.visit(s)
 
     visit_TryStar = visit_Try  # type: ignore[assignment]
@@ -1265,12 +1292,28 @@ def scan_source(source: str, filename: str = "<string>") -> ScanResult:
     return _scan([(filename, source)])
 
 
+_TEST_DIRS = frozenset({"test", "tests", "testing"})
+_TEST_FILE_GLOBS = ("test_*.py", "*_test.py", "tests.py", "conftest.py")
+
+
+def _is_test_file(rel: Path) -> bool:
+    """True for a test file by path segments, not substrings.
+
+    `tests/x.py`, `pkg/test/x.py`, `test_x.py`, `x_test.py`, `tests.py` and `conftest.py` match;
+    `latest.py`, `attestation.py` and `contest/app.py` do not. `rel` is relative to the scan root,
+    so a checkout that lives under a directory called `tests` is not excluded wholesale.
+    """
+    if any(part.lower() in _TEST_DIRS for part in rel.parts[:-1]):
+        return True
+    return any(fnmatch.fnmatch(rel.name.lower(), g) for g in _TEST_FILE_GLOBS)
+
+
 def scan_path(path: str, exclude_tests: bool = False) -> ScanResult:
     root = Path(path)
     items = []
     errors = []
     for p in _iter_py(root):
-        if exclude_tests and ("test" in p.name or "tests" in p.parts):
+        if exclude_tests and _is_test_file(p.relative_to(root) if root.is_dir() else Path(p.name)):
             continue
         try:
             items.append((str(p.relative_to(root) if root.is_dir() else p.name).replace("\\", "/"), p.read_text(encoding="utf-8", errors="replace")))

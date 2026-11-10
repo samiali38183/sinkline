@@ -151,13 +151,15 @@ those annotated `int`/`float`/`bool`/`UUID`, which pydantic will have coerced. D
 
 * **A heap model.** Instance fields are tracked per class, not per object, and not through
   inheritance, aliases (`other = self`) or attributes of non-`self` objects.
-* **Closures capturing outer taint.** An inner `def` that reads an enclosing tainted local is not tracked.
+* **Closures beyond definition-time capture.** A nested `def` starts from a copy of the enclosing
+  function's taint at the point of the `def` (pass 2 only, minus its own parameters). Variables assigned
+  in the enclosing function after the `def`, and closures returned and called elsewhere, are not tracked.
 * **Module globals across requests.** Writing `CACHE["q"]` in one handler and reading it in another.
 * **Key-sensitive containers beyond dict literals.** Lists, `dict(...)` calls and dicts built up in
   loops are tracked as a whole.
 
-The closure and module-global cases are labeled in `bench/corpus/hard_app.py` as `known FN` so the
-score keeps them visible instead of hiding them.
+The module-global case is labeled in `bench/corpus/hard_app.py` as `known FN` so the
+score keeps it visible instead of hiding it.
 
 ## Output
 

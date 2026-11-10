@@ -553,3 +553,254 @@ def test_self_field_is_per_class():
             os.system("ping " + self.target)
     """)
     assert r == {}
+
+
+# ---- try/except join ---------------------------------------------------------
+
+def test_try_except_keeps_taint_when_handler_reassigns():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        try:
+            host = request.args["h"]
+        except KeyError:
+            host = "localhost"
+        os.system("ping " + host)
+    """)
+    assert r == {12: {"CWE-78"}}
+
+
+def test_try_except_pre_try_taint_survives_handler_overwrite():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        host = request.args["h"]
+        try:
+            int(host)
+        except ValueError:
+            host = "localhost"
+        os.system("ping " + host)
+    """)
+    assert r == {13: {"CWE-78"}}
+
+
+def test_try_except_clean_on_every_path_is_clean():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        try:
+            host = shlex.quote(request.args["h"])
+        except KeyError:
+            host = "localhost"
+        os.system("ping " + host)
+    """)
+    assert r == {}
+
+
+def test_try_except_aborting_handler_is_not_a_path():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        try:
+            host = shlex.quote(request.args["h"])
+        except KeyError:
+            host = request.args["raw"]
+            raise ValueError("bad")
+        os.system("ping " + host)
+    """)
+    assert r == {}
+
+
+def test_try_else_and_finally_run_after_join():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        host = "localhost"
+        try:
+            pass
+        except KeyError:
+            host = request.args["h"]
+        finally:
+            os.system("ping " + host)
+    """)
+    assert r == {14: {"CWE-78"}}
+
+
+# ---- what a returned value counts as HTML ------------------------------------
+
+@pytest.mark.parametrize("ret", [
+    'request.args["q"]',            # bare subscript, no "<" anywhere in the source text
+    'name',                         # plain tainted name
+    '"<b>" + name',                 # concatenation
+    'f"{name}"',                    # f-string with no markup
+    'str(name)',
+])
+def test_returned_tainted_string_is_xss(ret):
+    r = cwes_by_line(FLASK + f"""
+    @app.route('/')
+    def v():
+        name = request.args["q"]
+        return {ret}
+    """)
+    assert r == {9: {"CWE-79"}}
+
+
+@pytest.mark.parametrize("ret", ["{'q': name}", "[name]", "(name, 200)", "jsonify(name)", "redirect(name)"])
+def test_returned_json_like_value_is_not_xss(ret):
+    r = cwes_by_line(FLASK + f"""
+    from flask import jsonify
+    @app.route('/')
+    def v():
+        name = request.args["q"]
+        return {ret}
+    """)
+    assert not any("CWE-79" in cs for cs in r.values())
+
+
+# ---- --exclude-tests is path-segment aware -----------------------------------
+
+_VULN = 'from flask import Flask, request\nimport os\napp = Flask(__name__)\n@app.route("/")\ndef v():\n    os.system("ping " + request.args["h"])\n'
+
+
+def _scanned(tmp_path, names, exclude=True):
+    from sinkline.engine import scan_path
+    for n in names:
+        f = tmp_path / n
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(_VULN, encoding="utf-8")
+    return sorted({f.file for f in scan_path(str(tmp_path), exclude_tests=exclude).findings})
+
+
+def test_exclude_tests_skips_real_test_files(tmp_path):
+    names = ["tests/a.py", "pkg/test/b.py", "test_c.py", "d_test.py", "tests.py", "pkg/conftest.py", "app.py"]
+    assert _scanned(tmp_path, names) == ["app.py"]
+
+
+def test_exclude_tests_does_not_match_substrings(tmp_path):
+    names = ["latest.py", "attestation.py", "contest/app.py", "protest_handler.py", "testimony.py", "app.py"]
+    assert _scanned(tmp_path, names) == sorted(names)
+
+
+def test_exclude_tests_ignores_directories_above_the_root(tmp_path):
+    from sinkline.engine import scan_path
+    root = tmp_path / "tests" / "checkout"
+    root.mkdir(parents=True)
+    (root / "app.py").write_text(_VULN, encoding="utf-8")
+    assert len(scan_path(str(root), exclude_tests=True).findings) == 1
+
+
+def test_without_flag_test_files_are_scanned(tmp_path):
+    assert _scanned(tmp_path, ["tests/a.py", "app.py"], exclude=False) == ["app.py", "tests/a.py"]
+
+
+# ---- tests added to kill surviving mutants ------------------------------------
+
+def test_loop_needs_second_round():
+    # `c = b` reads the value `b` had at the end of the previous iteration, so the taint
+    # only reaches `c` on the second pass over the body (MAX_LOOP_ROUNDS = 1 would miss it)
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        a = request.args["x"]
+        b = ""
+        c = ""
+        for i in range(3):
+            c = b
+            b = a
+        os.system("echo " + c)
+    """)
+    assert r == {14: {"CWE-78"}}
+
+
+def test_loop_needs_third_round():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        a = request.args["x"]
+        b = ""
+        c = ""
+        d = ""
+        for i in range(3):
+            d = c
+            c = b
+            b = a
+        os.system("echo " + d)
+    """)
+    assert r == {16: {"CWE-78"}}
+
+
+def test_attribute_call_never_resolves_to_same_named_user_function():
+    # `asyncio.run` is not a sink, so nothing but _summary_for can connect it to `def run`
+    r = cwes_by_line(FLASK + """
+    import asyncio
+    def run(cmd):
+        os.system(cmd)
+    @app.route('/')
+    def v():
+        asyncio.run(request.args["c"])
+    """)
+    assert r == {}
+
+
+def test_plain_name_call_still_resolves_to_user_function():
+    r = cwes_by_line(FLASK + """
+    def run(cmd):
+        os.system(cmd)
+    @app.route('/')
+    def v():
+        run(request.args["c"])
+    """)
+    assert [c for cs in r.values() for c in cs] == ["CWE-78"]
+
+
+# ---- closures: a nested def sees the enclosing function's taint ---------------
+
+def test_nested_function_sees_outer_taint():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        raw = request.args.get("q")
+        def inner():
+            return db.execute("SELECT " + raw)
+        return str(inner())
+    """)
+    assert r == {10: {"CWE-89"}}
+
+
+def test_nested_function_parameter_shadows_outer_taint():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        q = request.args.get("q")
+        def inner(q):
+            return db.execute("SELECT " + q)
+        return str(inner("1"))
+    """)
+    assert r == {}
+
+
+def test_nested_function_reassignment_cleans_outer_taint():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        q = request.args.get("q")
+        def inner():
+            q = "1"
+            return db.execute("SELECT " + q)
+        return str(inner())
+    """)
+    assert r == {}
+
+
+def test_nested_function_does_not_corrupt_outer_summary():
+    # pass 1: the outer parameter label must not leak into the inner function's summary
+    r = cwes_by_line(FLASK + """
+    def helper(x):
+        def inner():
+            return x
+        return "const"
+    @app.route('/')
+    def v():
+        os.system(helper(request.args["c"]))
+    """)
+    assert r == {}

