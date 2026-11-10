@@ -2,6 +2,10 @@
 
 ## 0.4.1 (2026-11-10)
 
+Benchmark (`python bench/score.py`): recall 0.967 to 0.984, F1 0.983 to 0.992 (TP 59 to 60, FN 2 to 1);
+precision stays 1.000 (FP 0). Tests 46 to 91. Public-project results in the README were not re-run for
+this release.
+
 Security
 - GitHub Action: inputs (`path`, `fail-on`, `min-confidence`) were interpolated straight into a shell
   line with `${{ inputs.* }}`, so a workflow that passed an untrusted or attacker-influenced value
@@ -12,6 +16,13 @@ Security
   the script with hostile values; the README section "Using the GitHub Action safely" shows the unsafe
   and safe forms. If you used the action with any input you do not fully control, upgrade and pin to a
   tag or commit.
+
+Analysis
+- Closures: a nested `def` now starts from the enclosing function's taint at the point of the `def`
+  (pass 2 only, excluding its own parameters), so `raw = request.args.get("q")` followed by an inner
+  function that reads `raw` is reported. Pass 1 is unchanged: there the enclosing environment holds
+  `param:N` labels of the outer function, which would corrupt the inner function's summary. Closes the
+  known FN at `hard_app.py:211`.
 
 Fixes
 - try/except: taint after a `try` is now the join of the try body (plus `else`) and each handler that

@@ -208,7 +208,7 @@ def n1():
     raw = request.args.get("q")
 
     def inner():
-        return db.execute("SELECT " + raw)                                     # VULN:CWE-89 -- known FN (closure captures outer taint)
+        return db.execute("SELECT " + raw)                                     # VULN:CWE-89 (closure captures outer taint)
 
     return str(inner())
 

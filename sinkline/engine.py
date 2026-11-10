@@ -304,10 +304,8 @@ class FileAnalyzer(ast.NodeVisitor):
     def _function(self, node) -> None:
         key = self._fn_key(node)
         saved = (self.env, self.scope, self.current_fn, self.current_summary, self.param_index, self.in_http_view, self.guards)
-        self.env = {}
-        self.guards = {}
-        self.scope = Scope(self.scope)
-        self.current_fn = key
+        # a nested def sees the enclosing function's taint (pass 2 only: in pass 1 the outer env
+        # holds `param:N` labels of the OUTER function, which would corrupt the inner summary)
         args = node.args
         names = [a.arg for a in args.posonlyargs + args.args]
         if args.vararg:
@@ -315,6 +313,12 @@ class FileAnalyzer(ast.NodeVisitor):
         names += [a.arg for a in args.kwonlyargs]
         if args.kwarg:
             names.append(args.kwarg.arg)
+        # a parameter shadows an outer variable of the same name, so it is not inherited
+        outer = {k: v for k, v in saved[0].items() if k not in names} if (saved[2] is not None and not self.collect) else {}
+        self.env = dict(outer)
+        self.guards = {}
+        self.scope = Scope(self.scope)
+        self.current_fn = key
         self.param_index = {n: i for i, n in enumerate(names)}
 
         decos = self._decorator_quals(node)

@@ -751,3 +751,56 @@ def test_plain_name_call_still_resolves_to_user_function():
         run(request.args["c"])
     """)
     assert [c for cs in r.values() for c in cs] == ["CWE-78"]
+
+
+# ---- closures: a nested def sees the enclosing function's taint ---------------
+
+def test_nested_function_sees_outer_taint():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        raw = request.args.get("q")
+        def inner():
+            return db.execute("SELECT " + raw)
+        return str(inner())
+    """)
+    assert r == {10: {"CWE-89"}}
+
+
+def test_nested_function_parameter_shadows_outer_taint():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        q = request.args.get("q")
+        def inner(q):
+            return db.execute("SELECT " + q)
+        return str(inner("1"))
+    """)
+    assert r == {}
+
+
+def test_nested_function_reassignment_cleans_outer_taint():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        q = request.args.get("q")
+        def inner():
+            q = "1"
+            return db.execute("SELECT " + q)
+        return str(inner())
+    """)
+    assert r == {}
+
+
+def test_nested_function_does_not_corrupt_outer_summary():
+    # pass 1: the outer parameter label must not leak into the inner function's summary
+    r = cwes_by_line(FLASK + """
+    def helper(x):
+        def inner():
+            return x
+        return "const"
+    @app.route('/')
+    def v():
+        os.system(helper(request.args["c"]))
+    """)
+    assert r == {}

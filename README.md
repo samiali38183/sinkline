@@ -12,7 +12,7 @@ bug class. I wrote it because pattern linters flag every `cursor.execute` and re
 
 | 109 hand-labeled lines in `bench/corpus/` | TP | FP | FN | precision | recall | F1 |
 |---|---|---|---|---|---|---|
-| sinkline 0.4.0 | 59 | 0 | 2 | 1.000 | 0.967 | 0.983 |
+| sinkline 0.4.1 | 60 | 0 | 1 | 1.000 | 0.984 | 0.992 |
 | bandit 1.9.4 (lenient) | 33 | 20 | 28 | 0.623 | 0.541 | 0.579 |
 
 Pure Python on the standard `ast` module, zero dependencies. 42 rules mapped to OWASP 2021 and CWE;
@@ -156,13 +156,15 @@ false positive when a `SAFE` line produces any finding. No findings land on unla
 
 | tool | TP | FP | FN | TN | precision | recall | F1 |
 |---|---|---|---|---|---|---|---|
+| sinkline 0.4.1 | 60 | 0 | 1 | 48 | 1.000 | 0.984 | 0.992 |
 | sinkline 0.4.0 | 59 | 0 | 2 | 48 | 1.000 | 0.967 | 0.983 |
 | sinkline 0.3.0 | 58 | 1 | 3 | 47 | 0.983 | 0.951 | 0.967 |
 | bandit (lenient: any hit on a vulnerable line counts) | 33 | 20 | 28 | 28 | 0.623 | 0.541 | 0.579 |
 
-- sinkline's 2 FN are labeled known limits in `hard_app.py`: a closure capturing a tainted local
-  (`:211`) and taint passed between requests through a module global (`:224`), both CWE-89. Per-CWE
-  counts are in `python bench/score.py`.
+- sinkline's one FN is a labeled known limit in `hard_app.py`: taint passed between requests through a
+  module global (`:224`, CWE-89). Per-CWE counts are in `python bench/score.py`.
+- 0.4.0 to 0.4.1: the closure FN at `hard_app.py:211` is found (a nested `def` now sees taint from
+  the enclosing function). No other line changed.
 - 0.3.0 to 0.4.0: the FP at `hard_app.py:84` is gone (key-sensitive dict literals) and the FN at
   `:183` is found (instance fields across methods). See [CHANGELOG.md](CHANGELOG.md).
 - The bandit row was re-run with bandit 1.9.4; earlier runs with 1.8.3 and 1.8.6 gave the same
@@ -210,8 +212,8 @@ To see it on the benchmark instead of your own code:
 git clone https://github.com/samiali38183/sinkline && cd sinkline
 pip install -e ".[dev]"
 sinkline scan bench/corpus/flask_app.py          # 21 findings, each with its flow
-pytest -q                                        # 46 tests including the corpus gate
-python bench/score.py                            # precision 1.000  recall 0.967  F1 0.983
+pytest -q                                        # 91 tests including the corpus gate
+python bench/score.py                            # precision 1.000  recall 0.984  F1 0.992
 ```
 
 ## Usage
@@ -311,7 +313,8 @@ for f in res.findings:
   it should not be read as a held-out score. The public-project scans are the more independent
   check, but they are unlabeled and few.
 - **Known design limits** (labeled `known FN` in `bench/corpus/hard_app.py`):
-  - closures capturing tainted variables;
+  - closures that are returned and called elsewhere, and variables assigned in the enclosing
+    function after the nested `def` (a nested `def` sees the enclosing taint as of its definition);
   - module globals shared across requests (`CACHE["q"] = tainted` in one handler, read in another);
   - dynamic dispatch, `getattr`, `exec`-generated code, decorators that rewrite arguments.
 - **Instance fields are per class, not per object.** No inheritance, no aliasing (`other = self`),
@@ -339,7 +342,7 @@ Directions that follow from the limits above; none are implemented:
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                       # 46 tests: engine unit tests plus the corpus gate
+pytest -q                       # 91 tests: engine unit tests plus the corpus gate
 python bench/score.py -v        # corpus P/R/F1, per-CWE table, per-line FP/FN listing
 pip install ruff mypy && ruff check . && mypy
 pip install bandit && python bench/compare_bandit.py
