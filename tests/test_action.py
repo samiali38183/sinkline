@@ -76,7 +76,9 @@ def stub(tmp_path):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     exe = bindir / "sinkline"
-    exe.write_text('#!/usr/bin/env bash\nprintf "%s\n" "$@" > "$STUB_OUT"\nexit "${STUB_RC:-0}"\n', encoding="utf-8", newline="\n")
+    # Path.write_text(newline=) needs Python 3.10; this project supports 3.9
+    with open(exe, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write('#!/usr/bin/env bash\nprintf "%s\n" "$@" > "$STUB_OUT"\nexit "${STUB_RC:-0}"\n')
     exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
     return bindir
 
