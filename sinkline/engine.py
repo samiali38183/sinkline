@@ -34,6 +34,7 @@ constructor tracking, no alias tracking through mutable containers (`lst.append(
 from __future__ import annotations
 
 import ast
+import fnmatch
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1287,12 +1288,28 @@ def scan_source(source: str, filename: str = "<string>") -> ScanResult:
     return _scan([(filename, source)])
 
 
+_TEST_DIRS = frozenset({"test", "tests", "testing"})
+_TEST_FILE_GLOBS = ("test_*.py", "*_test.py", "tests.py", "conftest.py")
+
+
+def _is_test_file(rel: Path) -> bool:
+    """True for a test file by path segments, not substrings.
+
+    `tests/x.py`, `pkg/test/x.py`, `test_x.py`, `x_test.py`, `tests.py` and `conftest.py` match;
+    `latest.py`, `attestation.py` and `contest/app.py` do not. `rel` is relative to the scan root,
+    so a checkout that lives under a directory called `tests` is not excluded wholesale.
+    """
+    if any(part.lower() in _TEST_DIRS for part in rel.parts[:-1]):
+        return True
+    return any(fnmatch.fnmatch(rel.name.lower(), g) for g in _TEST_FILE_GLOBS)
+
+
 def scan_path(path: str, exclude_tests: bool = False) -> ScanResult:
     root = Path(path)
     items = []
     errors = []
     for p in _iter_py(root):
-        if exclude_tests and ("test" in p.name or "tests" in p.parts):
+        if exclude_tests and _is_test_file(p.relative_to(root) if root.is_dir() else Path(p.name)):
             continue
         try:
             items.append((str(p.relative_to(root) if root.is_dir() else p.name).replace("\\", "/"), p.read_text(encoding="utf-8", errors="replace")))

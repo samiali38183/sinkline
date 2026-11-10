@@ -655,3 +655,39 @@ def test_returned_json_like_value_is_not_xss(ret):
         return {ret}
     """)
     assert not any("CWE-79" in cs for cs in r.values())
+
+
+# ---- --exclude-tests is path-segment aware -----------------------------------
+
+_VULN = 'from flask import Flask, request\nimport os\napp = Flask(__name__)\n@app.route("/")\ndef v():\n    os.system("ping " + request.args["h"])\n'
+
+
+def _scanned(tmp_path, names, exclude=True):
+    from sinkline.engine import scan_path
+    for n in names:
+        f = tmp_path / n
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(_VULN, encoding="utf-8")
+    return sorted({f.file for f in scan_path(str(tmp_path), exclude_tests=exclude).findings})
+
+
+def test_exclude_tests_skips_real_test_files(tmp_path):
+    names = ["tests/a.py", "pkg/test/b.py", "test_c.py", "d_test.py", "tests.py", "pkg/conftest.py", "app.py"]
+    assert _scanned(tmp_path, names) == ["app.py"]
+
+
+def test_exclude_tests_does_not_match_substrings(tmp_path):
+    names = ["latest.py", "attestation.py", "contest/app.py", "protest_handler.py", "testimony.py", "app.py"]
+    assert _scanned(tmp_path, names) == sorted(names)
+
+
+def test_exclude_tests_ignores_directories_above_the_root(tmp_path):
+    from sinkline.engine import scan_path
+    root = tmp_path / "tests" / "checkout"
+    root.mkdir(parents=True)
+    (root / "app.py").write_text(_VULN, encoding="utf-8")
+    assert len(scan_path(str(root), exclude_tests=True).findings) == 1
+
+
+def test_without_flag_test_files_are_scanned(tmp_path):
+    assert _scanned(tmp_path, ["tests/a.py", "app.py"], exclude=False) == ["app.py", "tests/a.py"]
