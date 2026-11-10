@@ -504,3 +504,52 @@ def test_dict_without_constant_keys_stays_container_level():
         db.execute("SELECT %s" % e["x"])
     """)
     assert r == {10: {"CWE-89"}, 13: {"CWE-89"}}
+
+
+# ---- instance fields across methods ---------------------------------------------
+
+def test_self_field_set_in_one_method_used_in_another():
+    res = scan_source(_src(FLASK + """
+    class Pinger:
+        def load(self):
+            self.target = request.args.get("target")
+        def fire(self):
+            os.system("ping " + self.target)
+    """), "t.py")
+    assert [(f.line, f.cwe, f.confidence) for f in res.findings] == [(10, "CWE-78", "medium")]
+    notes = [s.note for s in res.findings[0].flow]
+    assert any("stored in `self.target` by Pinger.load()" in n for n in notes)
+
+
+def test_self_field_reassigned_locally_or_clean_is_safe():
+    r = cwes_by_line(FLASK + """
+    class A:
+        def load(self):
+            self.target = request.args.get("target")
+        def fire(self):
+            self.target = "localhost"
+            os.system("ping " + self.target)
+    class B:
+        def load(self, t):
+            self.target = t
+        def fire(self):
+            os.system("ping " + self.target)
+    class C:
+        def load(self):
+            self.target = shlex.quote(request.args.get("target"))
+        def fire(self):
+            os.system("ping " + self.target)
+    """)
+    assert r == {}
+
+
+def test_self_field_is_per_class():
+    r = cwes_by_line(FLASK + """
+    class A:
+        def load(self):
+            self.target = request.args.get("target")
+    class B:
+        def fire(self):
+            os.system("ping " + self.target)
+    """)
+    assert r == {}

@@ -180,7 +180,7 @@ class Handler:
         self.target = request.args.get("target")
 
     def fire(self):
-        os.system("ping " + self.target)                                       # VULN:CWE-78 -- known FN (field flow across methods)
+        os.system("ping " + self.target)                                       # VULN:CWE-78 (field set in load(), used in fire())
 
     def direct(self, t):
         self.t = t

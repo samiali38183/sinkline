@@ -23,6 +23,10 @@ Design (what an interviewer will ask about):
 * **Sink gates.** `subprocess.run(cmd, shell=True)` fires; `shell=False` doesn't.
   `yaml.load(x)` fires unless `Loader=SafeLoader`. `torch.load(p)` fires unless weights_only=True.
 
+* **Instance fields across methods.** Pass 1 records, per class, which `self.<attr>` fields are
+  assigned request data in any method. A method that reads such a field without assigning it
+  first sees that taint (flow-insensitive across methods, reported at medium confidence).
+
 Deliberate non-goals: no pointer analysis, no class hierarchy resolution beyond simple
 constructor tracking, no alias tracking through mutable containers (`lst.append(t)` taints lst).
 """
@@ -161,7 +165,8 @@ def _const_key(node: Optional[ast.AST]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 class FileAnalyzer(ast.NodeVisitor):
-    def __init__(self, path: str, source: str, tree: ast.Module, summaries: Dict[str, Summary], collect: bool):
+    def __init__(self, path: str, source: str, tree: ast.Module, summaries: Dict[str, Summary], collect: bool,
+                 fields: Optional[Dict[str, Taint]] = None):
         self.path = path
         self.lines = source.splitlines()
         self.tree = tree
@@ -179,6 +184,8 @@ class FileAnalyzer(ast.NodeVisitor):
         self.class_stack: List[str] = []
         self.loop_depth = 0
         self.guards: Dict[str, FrozenSet[str]] = {}  # name -> cwes cleared by validation guard in this block
+        # "module.Class.attr" -> taint stored into self.attr by any method of that class (shared across files and passes)
+        self.fields: Dict[str, Taint] = fields if fields is not None else {}
 
     # -- helpers -------------------------------------------------------------
     def _register_alias(self, alias: str, summ: "Summary") -> None:
@@ -464,6 +471,7 @@ class FileAnalyzer(ast.NodeVisitor):
                 if root == "self":
                     key = "self." + self._attr_path(tgt)
                     self.env[key] = t.step(self.fs(node, "propagate", f"stored in `{key}`")) if t else t
+                    self._record_field(tgt, t, node)
                 else:
                     cur = self.get(root)
                     ck = _const_key(tgt.slice) if isinstance(tgt, ast.Subscript) and isinstance(tgt.value, ast.Name) else None
@@ -480,6 +488,39 @@ class FileAnalyzer(ast.NodeVisitor):
             q = self.qual(tgt.value) if isinstance(tgt, ast.Subscript) else None
             if q and t and not self.collect and q.endswith("session"):
                 pass  # intentionally not a finding: session storage of request data is normal
+
+    def _field_key(self, node: ast.AST) -> Optional[str]:
+        """'mod.Class.attr' for `self.attr`, `self.attr[...]` or `self.attr.x` inside a method, else None."""
+        if not self.class_stack or self.current_fn is None:
+            return None
+        attr = None
+        while isinstance(node, (ast.Attribute, ast.Subscript)):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "self":
+                attr = node.attr
+                break
+            node = node.value
+        if attr is None:
+            return None
+        mod = self.module_names[0] if self.module_names else ""
+        return ".".join(x for x in (mod, *self.class_stack, attr) if x)
+
+    def _record_field(self, tgt: ast.AST, t: Taint, node: ast.AST) -> None:
+        """Pass 1: remember request data stored on `self` so other methods of the class can see it.
+        Parameter labels are left out: they depend on the caller and are handled by summaries."""
+        if not self.collect or not t:
+            return
+        real = frozenset(lab for lab in t.labels if not lab.startswith("param:"))
+        if not real:
+            return
+        key = self._field_key(tgt)
+        if key is None:
+            return
+        cls = ".".join(self.class_stack)
+        step = self.fs(node, "propagate", f"stored in `self.{key.rsplit('.', 1)[1]}` by {cls}.{self.current_fn.rsplit('.', 1)[-1]}()")
+        stored = Taint(real | {"~field"}, t.cleared, t.trail + (step,))
+        cur = self.fields.get(key)
+        if cur is None or not (stored.labels <= cur.labels and cur.cleared <= stored.cleared):
+            self.fields[key] = stored if cur is None else cur.union(stored)
 
     def _root_name(self, node: ast.AST) -> Optional[str]:
         while isinstance(node, (ast.Attribute, ast.Subscript, ast.Call)):
@@ -787,6 +828,12 @@ class FileAnalyzer(ast.NodeVisitor):
             key = "self." + node.attr
             if key in self.env and self.env[key]:
                 return self.env[key]
+            if key not in self.env:
+                # not assigned in this method: use what other methods of the class stored there
+                fkey = self._field_key(node)
+                ft = self.fields.get(fkey) if fkey else None
+                if ft:
+                    return ft.step(self.fs(node, "propagate", f"read `{key}` in {self.current_fn}()"))
         q = self.qual(node)
         st = self._source_taint(q, node)
         if st:
@@ -1158,8 +1205,8 @@ class FileAnalyzer(ast.NodeVisitor):
 
     def _emit(self, sink: Sink, node: ast.AST, t: Taint, flow: List[FlowStep], inside: Optional[str] = None, sink_line: Optional[int] = None, sink_file: Optional[str] = None) -> None:
         labels = sorted(l for l in t.labels if not l.startswith("param:"))
-        unknown = "~unknown-call" in t.labels
-        labels = [l for l in labels if l != "~unknown-call"]
+        unknown = "~unknown-call" in t.labels or "~field" in t.labels
+        labels = [l for l in labels if l not in ("~unknown-call", "~field")]
         src = ", ".join(labels) or "parameter"
         conf = "high"
         if unknown:
@@ -1234,9 +1281,9 @@ def scan_path(path: str, exclude_tests: bool = False) -> ScanResult:
     return res
 
 
-def _summary_state(summaries: Dict[str, Summary]) -> List[tuple]:
-    """A comparable snapshot of every distinct summary, used to detect the pass-1 fixpoint."""
-    out = []
+def _summary_state(summaries: Dict[str, Summary], fields: Dict[str, Taint]) -> List[tuple]:
+    """A comparable snapshot of every summary and stored field, used to detect the pass-1 fixpoint."""
+    out: List[tuple] = [(k, v.labels, v.cleared) for k, v in sorted(fields.items())]
     for key in sorted(summaries):
         s = summaries[key]
         if s is None:
@@ -1256,14 +1303,15 @@ def _scan(items: List[Tuple[str, str]]) -> ScanResult:
             errors.append(f"{name}: {e.msg} (line {e.lineno})")
 
     summaries: Dict[str, Summary] = {}
+    fields: Dict[str, Taint] = {}
     # Pass 1: summaries, re-run until no summary changes. Summaries only grow (sets of param
     # indexes and sink sites), so this terminates; the cap is a guard against pathological input.
     prev = None
     for _ in range(MAX_SUMMARY_ROUNDS):
         for name, src, tree in trees:
-            fa = FileAnalyzer(name, src, tree, summaries, collect=True)
+            fa = FileAnalyzer(name, src, tree, summaries, collect=True, fields=fields)
             fa.visit(tree)
-        state = _summary_state(summaries)
+        state = _summary_state(summaries, fields)
         if state == prev:
             break
         prev = state
@@ -1271,7 +1319,7 @@ def _scan(items: List[Tuple[str, str]]) -> ScanResult:
     findings: List[Finding] = []
     nfunc = sum(1 for s in summaries.values())
     for name, src, tree in trees:
-        fa = FileAnalyzer(name, src, tree, summaries, collect=False)
+        fa = FileAnalyzer(name, src, tree, summaries, collect=False, fields=fields)
         fa.visit(tree)
         findings.extend(fa.findings)
 
