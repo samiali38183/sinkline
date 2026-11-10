@@ -14,8 +14,8 @@ def test_corpus_scores():
     assert out.exists(), proc.stdout + proc.stderr
     r = json.loads(out.read_text())
     out.unlink()
-    assert r["precision"] >= 0.98, r
-    assert r["recall"] >= 0.95, r
+    assert r["precision"] >= 0.99, r
+    assert r["recall"] >= 0.96, r
     # every miss must be a documented design limit
     assert r["fn"] == r["known_fn"], r
     assert r["fp"] == r["known_fp"], r
