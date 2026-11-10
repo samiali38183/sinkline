@@ -1,0 +1,14 @@
+# sinkline as a pre-commit hook (https://pre-commit.com).
+# The whole tree is scanned on every run, not just the staged files, because flows cross
+# files: a view in one module and the SQL helper in another. `types: [python]` keeps the
+# hook from running on commits that touch no Python. Override `args` to change the path
+# or threshold; the first arg must be the path to scan.
+- id: sinkline
+  name: sinkline (taint analysis)
+  description: Fail the commit if attacker-controlled input reaches a dangerous sink.
+  entry: sinkline scan
+  language: python
+  types: [python]
+  pass_filenames: false
+  require_serial: true
+  args: [".", "--fail-on", "high", "--exclude-tests"]
