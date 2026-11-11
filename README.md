@@ -233,7 +233,7 @@ Cloned at the listed commits and scanned with `sinkline scan <dir>`; full output
 | repo | commit | findings | notes |
 |---|---|---|---|
 | [fportantier/vulpy](https://github.com/fportantier/vulpy) | `5249cc8` | 3 x CWE-89 (57 files, 216 functions) | all three in `bad/`, flowing `mod_user.py` to `libuser.py` across files; 0 findings in `good/` (re-scanned separately), which has the same function names |
-| [we45/Vulnerable-Flask-App](https://github.com/we45/Vulnerable-Flask-App) | `b6a4f97` | 4: SSTI (CWE-1336), SQLi (CWE-89), XSS (CWE-79), MD5 (CWE-328) | 4 CWEs in 2 OWASP categories (A02, A03) |
+| [we45/Vulnerable-Flask-App](https://github.com/we45/Vulnerable-Flask-App) | `b6a4f97` | 5: SSTI (CWE-1336), SQLi (CWE-89), XSS (CWE-79, two findings, one on the same template call as the SSTI), MD5 (CWE-328) | 4 CWEs in 2 OWASP categories (A02, A03); 0.4.1 reported 4 (the second XSS call-result finding is new in 0.5.0) |
 | [anxolerd/dvpwa](https://github.com/anxolerd/dvpwa) | `a1d8f89` | 1 x CWE-89, 1 x CWE-117 | aiohttp, async handlers |
 | [miguelgrinberg/microblog](https://github.com/miguelgrinberg/microblog) | `a975ef6` | 0 | the `urlsplit(next_page).netloc != ''` redirect check in `app/auth/routes.py` is treated as a guard |
 
