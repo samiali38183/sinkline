@@ -10,12 +10,20 @@ attacker-controlled input across functions and files and reports it only when it
 sink (SQL, shell, `eval`, file paths, redirects, deserialization, ...) without a sanitizer for that
 bug class. It exists because pattern linters flag every `cursor.execute` and reviewers stop reading.
 
-| 109 hand-labeled lines in `bench/corpus/` | TP | FP | FN | precision | recall | F1 |
-|---|---|---|---|---|---|---|
-| sinkline 0.4.1 | 60 | 0 | 1 | 1.000 | 0.984 | 0.992 |
-| bandit 1.9.4 (lenient) | 33 | 20 | 28 | 0.623 | 0.541 | 0.579 |
+| benchmark | metric | sinkline 0.5.0 | bandit 1.9.4 | semgrep 1.185.0 (OSS) |
+|---|---|---|---|---|
+| `bench/corpus/`: 109 lines, **labeled by the engine's author, not independent** | precision / recall / F1 | 1.000 / 0.984 / 0.992 | 0.623 / 0.541 / 0.579 (lenient) | not run |
+| **OWASP BenchmarkPython v0.1, independent**: the 10 taint categories (240 vulnerable, 437 safe cases) | TPR / FPR / TPR-FPR | 0.73 / 0.21 / +0.52 | 0.13 / 0.06 / +0.07 | 0.07 / 0.03 / +0.04 |
+| same suite, all 14 categories (adds weak hash, weak PRNG, cookie flags, trust boundary) | TPR / FPR / TPR-FPR | 0.39 / 0.12 / +0.27 | 0.40 / 0.03 / +0.36 | 0.16 / 0.02 / +0.14 |
 
-Pure Python on the standard `ast` module, zero dependencies. 42 rules mapped to OWASP 2021 and CWE;
+The independent row is the one to weigh. sinkline 0.4.1 scored 0.41 / 0.20 / +0.21 on the same 10 categories;
+the 0.5.0 changes were chosen by reading that run's failures, so 0.5.0 is not a held-out score either.
+sinkline finds several times more of the taint-class cases than the pattern tools, with a higher
+false-positive rate, and does not attempt four of the benchmark's 14 categories (Bandit does, which is why it
+leads over all 14). Scored with a documented script, not the official scorer; method, per-category table and
+what is left open: [`bench/external/`](bench/external/README.md).
+
+Pure Python on the standard `ast` module, zero dependencies. 43 rules mapped to OWASP 2021 and CWE;
 text, JSON, SARIF and HTML output; a GitHub Action and a pre-commit hook.
 [Sample HTML report](https://samiali38183.github.io/sinkline/) for the benchmark corpus.
 
@@ -33,8 +41,8 @@ $ sinkline scan vulpy        # fportantier/vulpy @ 5249cc8, first of 3 findings
 ```
 
 The source is in one file and the SQL is built in another. On the same project it reports nothing in
-the `good/` tree, which defines the same function names. The benchmark is small and was labeled by the repository author;
-see [Limitations](#limitations) before reading much into it.
+the `good/` tree, which defines the same function names. The 109-line corpus was labeled by the repository
+author; see [Results](#results) and [Limitations](#limitations) before reading much into it.
 
 ## Contents
 
@@ -108,15 +116,20 @@ Each of these is implemented in the code and covered by tests; the reasoning is 
   `if ".." in f`, `re.fullmatch`, `urlparse(x).netloc == ""` and `try: int(x) except: abort()` clear
   taint, but only on paths where the check holds, and the guard is CWE-scoped (a `..` check is a path
   guard, not a shell guard).
-- **Key-sensitive dict literals.** `row = {"id": 1, "note": tainted}` keeps per-key taint, so
-  `row["id"]` is clean and `row["note"]` is not. Anything that is not a literal with constant keys
+- **Key-sensitive dicts.** `row = {"id": 1, "note": tainted}` keeps per-key taint, so `row["id"]` is
+  clean and `row["note"]` is not. The same holds for a dict built by constant-key assignment
+  (`m = {}; m["a"] = "x"; m["b"] = tainted`). Anything else (computed keys, `**spread`, `dict(...)`)
   falls back to whole-container taint, which is the safe direction to be wrong in.
+- **Statically decided branches are pruned.** Locals holding a literal are tracked as constants, so
+  `if 7 * 42 - num > 200`, `"x" in s` on a literal string, a ternary on a constant condition, and a
+  `match` on a constant subject run only the live branch. A constant is dropped at any join where
+  the paths disagree and for anything assigned in a loop.
 - **Instance fields across methods.** A class whose `load()` stores `request.args[...]` in
   `self.target` and whose `fire()` passes `self.target` to `os.system` is reported, with a flow step
   naming the method that stored it. It does not know call order, so these findings are medium
   confidence.
 - **Sources, sinks and sanitizers are data.** `model.py` is a declarative table (30 source
-  entries, 138 sink signatures, 38 sanitizer entries). Argument-dependent risk is a keyword gate on
+  entries, 151 sink signatures, 38 sanitizer entries). Argument-dependent risk is a keyword gate on
   the sink row (`subprocess.run(shell=True)`, `yaml.load` without `SafeLoader`,
   `torch.load(weights_only=...)`) rather than engine special cases. Adding a sink is one line.
 - **Module-qualified summary keys, with ambiguity poisoning.** `bad/libuser.py::login` is
@@ -135,7 +148,7 @@ Each of these is implemented in the code and covered by tests; the reasoning is 
 
 What it recognizes, in short: assignments, f-strings, `%`/`.format`, slicing, string methods,
 containers, dict literal keys, `self` fields, comprehensions, `await`, augmented assignment, loops,
-`try/except`, cross-function and cross-file flows. 42 rules in 8 OWASP 2021 categories (A01, A02,
+`try/except`, `match`, cross-function and cross-file flows. 43 rules in 8 OWASP 2021 categories (A01, A02,
 A03, A05, A07, A08, A09, A10): SQLi, command injection, code injection, SSTI, XSS, path traversal,
 Zip/Tar Slip, open redirect, SSRF, deserialization (`pickle`, `yaml`, `torch.load`, `marshal`,
 `shelve`, `numpy.load`), weak hashing, log injection, XXE, LDAP/XPath/NoSQL injection, ReDoS, and a
@@ -144,18 +157,52 @@ few auth rules. Nothing is mapped to A04 (Insecure Design) or A06 (Vulnerable Co
 
 ## Results
 
-All figures reproduced on 2026-11-10 with Python 3.12.2; tests and benchmark also run on 3.10.11 and
-3.13.1 with identical results. Commands are in [Development](#development).
+The corpus figures were reproduced with Python 3.12.2 (earlier runs on 3.10.11 and 3.13.1 gave
+identical results); the external-benchmark figures with Python 3.12.2 on 2026-11-11. Commands are in [Development](#development).
 
-### Labeled benchmark
+### External benchmark (independent)
 
-`bench/corpus/` has 109 hand-labeled lines in Flask, FastAPI, Django and CLI code (61 vulnerable,
+OWASP BenchmarkPython v0.1 (commit `f129148`), scored with a documented script that follows the
+BenchmarkUtils definitions (it is not the official scorer). All 14 categories, per-category numbers,
+Bandit and Semgrep configs, versions, exact commands and raw per-test tables are in
+[`bench/external/`](bench/external/README.md). Summary of the 10 taint categories (TPR / FPR / TPR-FPR):
+
+| category (real / safe cases) | sinkline 0.4.1 | sinkline 0.5.0 | bandit | semgrep |
+|---|---|---|---|---|
+| sqli (5 / 11) | 0.80 / 0.00 / +0.80 | 0.80 / 0.00 / +0.80 | 1.00 / 1.00 / +0.00 | 0.00 / 0.00 / +0.00 |
+| cmdi (13 / 7) | 0.31 / 0.57 / -0.26 | 0.39 / 0.14 / +0.24 | 1.00 / 1.00 / +0.00 | 0.54 / 1.00 / -0.46 |
+| codeinj (20 / 33) | 0.65 / 0.52 / +0.14 | 0.75 / 0.39 / +0.36 | 0.00 / 0.00 / +0.00 | 0.00 / 0.00 / +0.00 |
+| xss (31 / 58) | 0.74 / 0.50 / +0.24 | 0.77 / 0.31 / +0.46 | 0.00 / 0.00 / +0.00 | 0.00 / 0.00 / +0.00 |
+| pathtraver (65 / 103) | 0.31 / 0.08 / +0.23 | 0.66 / 0.09 / +0.57 | 0.00 / 0.00 / +0.00 | 0.03 / 0.02 / +0.01 |
+| redirect (13 / 21) | 0.69 / 0.38 / +0.31 | 0.69 / 0.38 / +0.31 | 0.00 / 0.00 / +0.00 | 0.00 / 0.00 / +0.00 |
+| deserialization (18 / 36) | 0.83 / 0.14 / +0.69 | 0.89 / 0.06 / +0.83 | 0.72 / 0.19 / +0.53 | 0.50 / 0.17 / +0.33 |
+| ldapi (16 / 13) | 0.00 / 0.00 / +0.00 | 0.69 / 0.15 / +0.53 | 0.00 / 0.00 / +0.00 | 0.00 / 0.00 / +0.00 |
+| xpathi (51 / 135) | 0.10 / 0.04 / +0.06 | 0.80 / 0.22 / +0.58 | 0.00 / 0.00 / +0.00 | 0.00 / 0.00 / +0.00 |
+| xxe (8 / 20) | 0.75 / 0.65 / +0.10 | 0.88 / 0.50 / +0.38 | 0.00 / 0.00 / +0.00 | 0.00 / 0.00 / +0.00 |
+
+- **Not covered by sinkline:** `hash` (weak algorithm), `weakrand`, `securecookie`, `trustbound`. It scores 0 on
+  all four; Bandit scores +1.00 on hash and +0.78 on weakrand, Semgrep +0.76 on hash. "Weak hashing" in
+  sinkline means an MD5 call applied to tainted data, not a general weak-algorithm check.
+- Where sinkline leads, it leads mostly because Bandit and Semgrep OSS have no rule (or almost none) for the category (xss,
+  xpathi, ldapi, xxe, codeinj, pathtraver, redirect), not because their rules are worse. Where both have rules,
+  on deserialization, sinkline's score is higher (+0.83 against +0.53 and +0.33) with fewer false positives.
+  On sqli and cmdi Bandit flags every file, so its FPR is 1.00.
+- sinkline's false-positive rate on this suite is high (0.21 pooled). Many of the safe cases are
+  deliberately obfuscated; the remaining classes are listed in `bench/external/README.md`.
+- The 0.4.1 to 0.5.0 gains come from fixes made after reading this benchmark's misses (see
+  [CHANGELOG.md](CHANGELOG.md)): some are engine fixes, some are added sink coverage for APIs the suite
+  uses. Expect less on code that is not shaped like this suite.
+
+### Labeled benchmark (self-labeled, same author)
+
+Not independent: `bench/corpus/` has 109 hand-labeled lines in Flask, FastAPI, Django and CLI code (61 vulnerable,
 48 safe variants of the same patterns, including cross-file and adversarial cases). `bench/score.py`
 counts a true positive when a labeled `VULN:CWE-xx` line produces a finding with that CWE, and a
 false positive when a `SAFE` line produces any finding. No findings land on unlabeled lines.
 
 | tool | TP | FP | FN | TN | precision | recall | F1 |
 |---|---|---|---|---|---|---|---|
+| sinkline 0.5.0 | 60 | 0 | 1 | 48 | 1.000 | 0.984 | 0.992 |
 | sinkline 0.4.1 | 60 | 0 | 1 | 48 | 1.000 | 0.984 | 0.992 |
 | sinkline 0.4.0 | 59 | 0 | 2 | 48 | 1.000 | 0.967 | 0.983 |
 | sinkline 0.3.0 | 58 | 1 | 3 | 47 | 0.983 | 0.951 | 0.967 |
@@ -163,6 +210,7 @@ false positive when a `SAFE` line produces any finding. No findings land on unla
 
 - sinkline's one FN is a labeled known limit in `hard_app.py`: taint passed between requests through a
   module global (`:224`, CWE-89). Per-CWE counts are in `python bench/score.py`.
+- 0.4.1 to 0.5.0: no line changed. The 0.5.0 fixes target patterns this corpus does not contain.
 - 0.4.0 to 0.4.1: the closure FN at `hard_app.py:211` is found (a nested `def` now sees taint from
   the enclosing function). No other line changed.
 - 0.3.0 to 0.4.0: the FP at `hard_app.py:84` is gone (key-sensitive dict literals) and the FN at
@@ -174,8 +222,8 @@ false positive when a `SAFE` line produces any finding. No findings land on unla
   data-flow model. Its 20 false positives are mostly rules that fire on any string-built SQL
   (B608 x10) or any `subprocess` import/call (B603/B607/B602/B605) even on the labeled-safe variants,
   and its misses sit in categories where it has no taint-based rule (labeled SQLi 9, XSS 5, path
-  traversal 5, open redirect 4, command injection 3). It has not been benchmarked against Semgrep or
-  CodeQL.
+  traversal 5, open redirect 4, command injection 3). The external benchmark above includes Semgrep OSS;
+  CodeQL has not been run.
 
 ### Public projects
 
@@ -211,8 +259,8 @@ To see it on the benchmark instead of your own code:
 ```bash
 git clone https://github.com/samiali38183/sinkline && cd sinkline
 pip install -e ".[dev]"
-sinkline scan bench/corpus/flask_app.py          # 21 findings, each with its flow
-pytest -q                                        # 91 tests including the corpus gate
+sinkline scan bench/corpus/flask_app.py          # 22 findings, each with its flow
+pytest -q                                        # 138 tests including the corpus gate
 python bench/score.py                            # precision 1.000  recall 0.984  F1 0.992
 ```
 
@@ -228,7 +276,7 @@ sinkline scan . --fail-on high                   # exit 1 at/above a severity
 sinkline scan . --min-confidence high            # drop low-confidence flows
 sinkline scan . --rule A03:2021 --rule CWE-79    # restrict by rule id, OWASP category or CWE
 sinkline scan . --exclude-tests
-sinkline rules                                   # 42 rules, 138 sink signatures, by OWASP category
+sinkline rules                                   # 43 rules, 151 sink signatures, by OWASP category
 sinkline explain SL-CMDI-003
 ```
 
@@ -302,10 +350,13 @@ for f in res.findings:
   a finding, and to teach why a given sanitizer was or was not enough.
 - **Where it should not be the only control.** It is reachability analysis, not exploit proof, it
   is Python-only, and it has the blind spots listed below. It is a complement to a mature SAST
-  or review process, not a replacement; no head-to-head against those tools has been run.
+  or review process, not a replacement; the only head-to-head run is against Bandit and Semgrep OSS on one synthetic suite (see Results).
 
 ## Limitations
 
+- **Accuracy on independent code is modest.** On OWASP BenchmarkPython the false-positive rate is 0.21
+  and the true-positive rate 0.73 on the taint categories; sinkline does not cover weak hash, weak PRNG,
+  cookie flags or trust-boundary rules at all. It is a triage aid, not a gate to trust blindly.
 - **Small, self-labeled benchmark.** 109 lines, labeled by the same person who wrote the engine. The
   corpus doubles as a regression suite (the CI floor is the recorded score), so the headline numbers
   are best read as "no regressions, and the design limits are visible", not as a generalization
@@ -320,8 +371,15 @@ for f in res.findings:
 - **Instance fields are per class, not per object.** No inheritance, no aliasing (`other = self`),
   no fields on non-`self` objects, and no call ordering: if `fire()` can run before `load()`, or
   `load()` is never called, the finding is still reported (at medium confidence).
-- **Key sensitivity covers dict literals only.** Dicts built with `dict(...)`, `**spread`, computed
-  keys or in loops, and all lists, are tracked as a whole container.
+- **Key sensitivity covers constant-key dicts only.** Dicts built with `dict(...)`, `**spread`, computed
+  keys or in loops, and all lists, are tracked as a whole container: a list that is appended to and
+  popped by position is not modeled, which is the main false-positive source on the external benchmark.
+- **Other taint carried by objects is lost:** `ConfigParser.set` then `.get`, and request data wrapped in a
+  user-defined object, are not tracked.
+- **XSS** is reported for tainted strings returned from a view, for `HTMLResponse` / `HttpResponse` /
+  `Response` / `make_response` bodies, `render_template_string` with a tainted template, and a few string
+  helpers on those values. It does not follow a tainted value into a template context (autoescaping is
+  assumed) and it does not model response content types.
 - **Python only.** No JavaScript templates; ORM query builders are modeled only at the raw-SQL entry
   points (`sqlalchemy.text`, `QuerySet.raw`, `Session.execute`); no type inference beyond receiver
   resolution.
@@ -336,13 +394,16 @@ Directions that follow from the limits above; none are implemented:
 
 - Closure capture, and a real heap model (per-object fields, inheritance).
 - Key-sensitive tracking for lists and dicts built outside literals.
-- More labeled real-world projects to replace the self-labeled benchmark as the headline number.
+- Position-sensitive lists and a small heap model for objects that hold taint (`ConfigParser`, wrappers).
+- Rules for the benchmark categories sinkline does not cover (weak hash, weak PRNG, cookie flags) if the
+  scope is widened beyond taint.
+- More labeled real-world projects, to complement the external benchmark.
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                       # 91 tests: engine unit tests plus the corpus gate
+pytest -q                       # 138 tests: engine unit tests plus the corpus gate
 python bench/score.py -v        # corpus P/R/F1, per-CWE table, per-line FP/FN listing
 pip install ruff mypy && ruff check . && mypy
 pip install bandit && python bench/compare_bandit.py
@@ -350,8 +411,8 @@ pip install bandit && python bench/compare_bandit.py
 
 ```
 sinkline/
-  engine.py    ~1330 lines  abstract interpreter, summaries, fields, guards, fixpoint
-  model.py      ~420 lines  sources / sinks / sanitizers / OWASP+CWE table
+  engine.py    ~1630 lines  abstract interpreter, summaries, fields, guards, fixpoint
+  model.py      ~440 lines  sources / sinks / sanitizers / OWASP+CWE table
   resolve.py    ~150 lines  import + alias + receiver-type resolution
   report.py     ~220 lines  text / JSON / SARIF 2.1.0 / HTML
   cli.py        ~130 lines
@@ -359,6 +420,7 @@ bench/
   corpus/       labeled ground truth (VULN:CWE-xx / SAFE tags) incl. cross-file + adversarial cases
   score.py      precision / recall / F1 per CWE
   compare_bandit.py
+  external/     OWASP BenchmarkPython scorer, run script, per-test results (benchmark itself is not copied)
 tests/          unit tests (one small program per engine feature) + corpus gate + action tests
 scripts/        action-scan.sh, the script action.yml runs
 docs/DESIGN.md  design write-up
