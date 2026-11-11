@@ -19,12 +19,12 @@ TOOLS=("$@"); [ ${#TOOLS[@]} -eq 0 ] && TOOLS=(sinkline)
 ARGS=()
 for t in "${TOOLS[@]}"; do
   case "$t" in
-    sinkline) sinkline scan testcode --format json -o "$WORK/raw/sinkline-$LABEL.json" || true
+    sinkline) sinkline scan . --format json -o "$WORK/raw/sinkline-$LABEL.json" || true
               ARGS+=("sinkline=$WORK/raw/sinkline-$LABEL.json") ;;
-    bandit)   bandit -r testcode -f json -o "$WORK/raw/bandit.json" -q || true
+    bandit)   bandit -r . -f json -o "$WORK/raw/bandit.json" -q || true
               ARGS+=("bandit=$WORK/raw/bandit.json") ;;
     semgrep)  semgrep scan --config p/python --config p/owasp-top-ten --json --metrics=off --quiet \
-                -o "$WORK/raw/semgrep.json" testcode
+                -o "$WORK/raw/semgrep.json" .
               ARGS+=("semgrep=$WORK/raw/semgrep.json") ;;
   esac
 done

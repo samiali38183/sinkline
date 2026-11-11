@@ -479,3 +479,21 @@ def test_match_on_constant_subject_takes_the_matching_case():
         os.system(bar)
     """)
     assert r == {}
+
+
+# ---- a quote check guards XPath string literals (and only XPath) ---------------------
+
+def test_quote_rejection_guards_xpath_only():
+    r = cwes_by_line(FLASK + """
+    import lxml.etree
+    @app.route('/')
+    def v():
+        q = request.args["q"]
+        root = lxml.etree.parse("e.xml")
+        if "'" in q:
+            return "bad"
+        root.xpath("//e[@id='" + q + "']")
+        os.system(q)
+        return ""
+    """)
+    assert list(r.values()) == [{"CWE-78"}]

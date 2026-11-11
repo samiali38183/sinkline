@@ -666,17 +666,17 @@ class FileAnalyzer(ast.NodeVisitor):
             a, b = self._const_eval_inner(node.left), self._const_eval_inner(node.right)
             if a is _UNK or b is _UNK:
                 return _UNK
-            op = type(node.op)
-            if op is ast.Add and type(a) is type(b) and isinstance(a, (int, str, tuple)):
+            bop = type(node.op)
+            if bop is ast.Add and type(a) is type(b) and isinstance(a, (int, str, tuple)):
                 return a + b  # type: ignore[operator]
             if isinstance(a, int) and isinstance(b, int) and not isinstance(a, bool) and not isinstance(b, bool):
-                if op is ast.Sub:
+                if bop is ast.Sub:
                     return a - b
-                if op is ast.Mult and abs(a) < 10**6 and abs(b) < 10**6:
+                if bop is ast.Mult and abs(a) < 10**6 and abs(b) < 10**6:
                     return a * b
-                if op is ast.FloorDiv and b != 0:
+                if bop is ast.FloorDiv and b != 0:
                     return a // b
-                if op is ast.Mod and b != 0:
+                if bop is ast.Mod and b != 0:
                     return a % b
             return _UNK
         if isinstance(node, ast.BoolOp):
@@ -927,6 +927,11 @@ class FileAnalyzer(ast.NodeVisitor):
                 n2 = name_of(right)
                 if n2:
                     f[n2] = frozenset({"CWE-22"})
+            # "'" in x -> the false branch has no quote to break out of an XPath string literal
+            if isinstance(left, ast.Constant) and left.value in ("'", '"') and isinstance(op, (ast.In, ast.NotIn)):
+                n2 = name_of(right)
+                if n2:
+                    (f if isinstance(op, ast.In) else t)[n2] = frozenset({"CWE-643"})
             if isinstance(left, ast.Constant) and isinstance(left.value, str) and left.value in ("..",) and isinstance(op, ast.NotIn):
                 n2 = name_of(right)
                 if n2:
