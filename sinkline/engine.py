@@ -48,11 +48,17 @@ from .model import (
     Sink,
     build_indexes,
 )
-from .resolve import Resolver, Scope
+from .resolve import INSTANCE_TYPES, Resolver, Scope
 
 _SOURCES, _SINKS, _SANITIZERS = build_indexes()
 
 MAX_LOOP_ROUNDS = 3
+
+# Methods that keep taint but return a container or JSON-like value, not a string a view would serve as HTML.
+NON_STRING_METHODS = frozenset({
+    "split", "rsplit", "splitlines", "partition", "rpartition", "items", "values", "keys", "copy",
+    "getlist", "to_dict", "dict", "json", "get_json", "readlines",
+})
 MAX_FLOW_STEPS = 24
 MAX_SUMMARY_ROUNDS = 10
 
@@ -141,6 +147,7 @@ class Summary:
     sanitizes: FrozenSet[str] = frozenset()               # if the function is itself a sanitizer wrapper
     is_route: bool = False
     returns_http: bool = False
+    returns_type: Optional[str] = None                    # receiver type of the returned object (conn = get_connection())
 
 
 @dataclass(frozen=True)
@@ -398,6 +405,10 @@ class FileAnalyzer(ast.NodeVisitor):
             # does this function look like a sanitizer wrapper? (returns the result of a sanitizer applied to a param)
             if t.cleared and t.labels and all(lab.startswith("param:") for lab in t.labels):
                 summ.sanitizes = t.cleared
+        if self.collect and summ is not None and isinstance(node.value, ast.Name):
+            rq = self.scope.lookup(node.value.id)
+            if rq in INSTANCE_TYPES:
+                summ.returns_type = rq
         if not self.collect and self.in_http_view and t and self._returns_html(node.value, t):
             self._report_sink(_SINKS["__return_http__"][0], node, t, node.value)
 
@@ -409,15 +420,33 @@ class FileAnalyzer(ast.NodeVisitor):
         if isinstance(value, (ast.Dict, ast.List, ast.Tuple)):
             return False
         if isinstance(value, ast.Call):
-            q = self.qual(value.func) or ""
-            if any(k in q for k in ("jsonify", "JSONResponse", "json", "redirect", "render_template", "send_", "Response", "make_response", "abort")):
-                return False
-            if q.split(".")[-1] in {"str", "format"}:
-                return True
-            return False
+            return self._call_result_is_the_string(value)
         # f-string / concat / % formatting / plain tainted name
         # Flask and Django serve a returned str as text/html, so a bare tainted value is XSS too.
         return isinstance(value, (ast.JoinedStr, ast.BinOp, ast.Name, ast.Attribute, ast.Subscript))
+
+    def _call_result_is_the_string(self, call: ast.Call) -> bool:
+        """A returned call is XSS only when its result is (derived from) the tainted string itself.
+
+        Response constructors, redirects, JSON and template renderers are not: the first kind is
+        checked as a sink of its own (HTMLResponse, make_response, ...), the rest do not produce
+        attacker-controlled HTML from a tainted argument. An unknown function is not guessed at,
+        because `render(request, "x.html", {"q": q})` passes taint in and returns a safe response.
+        """
+        q = self.qual(call.func) or ""
+        if any(k in q for k in ("jsonify", "JSONResponse", "json", "redirect", "render", "send_", "Response", "make_response", "abort", "url_for", "TemplateResponse")):
+            return False
+        if self.lookup_sink(q) or self.lookup_sanitizer(q) is not None:
+            return False
+        last = call.func.attr if isinstance(call.func, ast.Attribute) else q.split(".")[-1]
+        if last in {"str", "format", "bytes"}:
+            return True
+        if isinstance(call.func, ast.Attribute):
+            if self._source_taint(q, call.func):        # request.args.get("q")
+                return last not in NON_STRING_METHODS
+            if last in STR_PROPAGATING_METHODS and last not in NON_STRING_METHODS:
+                return bool(self.eval(call.func.value))  # name.strip(), request.args.get("q").strip()
+        return self._summary_for(call.func, q) is not None  # helper(name)
 
     # -- statements ----------------------------------------------------------
     def visit_Assign(self, node: ast.Assign) -> None:
@@ -429,7 +458,10 @@ class FileAnalyzer(ast.NodeVisitor):
                 if isinstance(tgt, ast.Name) and cq:
                     self.resolver.bind_instance(tgt.id, cq, self.scope)
                     inst = self.resolver.qualname(node.value, self.scope)
-                    if inst and inst != cq:
+                    helper = self._summary_for(node.value.func, cq)
+                    if helper is not None and helper.returns_type:
+                        self.scope.bind(tgt.id, helper.returns_type)   # conn = get_connection()
+                    elif inst and inst != cq:
                         self.scope.bind(tgt.id, inst)
                     else:
                         # user-defined class? bind the instance name to the class so h.method resolves to Class.method
@@ -437,6 +469,11 @@ class FileAnalyzer(ast.NodeVisitor):
                             if any(k.startswith(cand + ".") for k in self.summaries):
                                 self.scope.bind(tgt.id, cand)
                                 break
+        elif isinstance(node.value, ast.BinOp) and isinstance(node.value.op, ast.Div) and self._is_path_object(node.value.left):
+            # p = BASE / name  keeps the Path receiver type, so p.read_text() / p.exists() resolve to the Path sinks
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name):
+                    self.scope.bind(tgt.id, "pathlib.Path")
         for tgt in node.targets:
             self._assign_target(tgt, t, node)
 
@@ -818,11 +855,56 @@ class FileAnalyzer(ast.NodeVisitor):
 
     visit_TryStar = visit_Try  # type: ignore[assignment]
 
-    def visit_Match(self, node: ast.Match) -> None:  # pragma: no cover
-        self.eval(node.subject)
-        for c in node.cases:
-            for s in c.body:
+    def visit_Match(self, node: ast.Match) -> None:
+        """`match` is a branch: each case starts from the state before it, and the state after is
+        the join of every case that does not exit, plus the fall-through state when no case is
+        irrefutable (no `case _` / bare capture)."""
+        subj = self.eval(node.subject)
+        pre_env, pre_guards = dict(self.env), dict(self.guards)
+        outcomes: List[Tuple[Dict[str, Taint], Dict[str, FrozenSet[str]]]] = []
+        exhaustive = False
+        for case in node.cases:
+            self.env, self.guards = dict(pre_env), dict(pre_guards)
+            self._bind_pattern(case.pattern, subj, node)
+            if case.guard is not None:
+                self.eval(case.guard)
+            for s in case.body:
                 self.visit(s)
+            if not self._block_exits(case.body):
+                outcomes.append((self.env, self.guards))
+            if case.guard is None and self._irrefutable(case.pattern):
+                exhaustive = True
+        if not exhaustive:
+            outcomes.append((pre_env, pre_guards))
+        if not outcomes:  # every case exits
+            self.env, self.guards = pre_env, pre_guards
+            return
+        env, guards = outcomes[0]
+        for e, g in outcomes[1:]:
+            env = self._join_envs(env, e)
+            guards = {k: v & g[k] for k, v in guards.items() if k in g}
+        self.env, self.guards = env, guards
+
+    def _bind_pattern(self, pattern: ast.AST, subj: Taint, node: ast.AST) -> None:
+        """Names captured by a pattern (`case str() as s`, `case [a, *rest]`, `case {"k": v, **rest}`) get the subject's taint."""
+        for sub in ast.walk(pattern):
+            name = None
+            if isinstance(sub, (ast.MatchAs, ast.MatchStar)):
+                name = sub.name
+            elif isinstance(sub, ast.MatchMapping):
+                name = sub.rest
+            if name:
+                t = subj.plain()
+                self.env[name] = t.step(self.fs(node, "propagate", f"matched into `{name}`")) if t else EMPTY
+                self.guards.pop(name, None)
+
+    @staticmethod
+    def _irrefutable(pattern: ast.AST) -> bool:
+        if isinstance(pattern, ast.MatchAs):
+            return pattern.pattern is None
+        if isinstance(pattern, ast.MatchOr):
+            return any(FileAnalyzer._irrefutable(p) for p in pattern.patterns)
+        return False
 
     # -- expressions ---------------------------------------------------------
     def eval(self, node: Optional[ast.AST]) -> Taint:
@@ -843,7 +925,7 @@ class FileAnalyzer(ast.NodeVisitor):
 
     def e_Name(self, node: ast.Name) -> Taint:
         t = self.get(node.id)
-        if t:
+        if t or t.keys is not None:   # a clean dict still carries its per-key detail
             return t
         q = self.qual(node)
         return self._source_taint(q, node)
@@ -902,6 +984,14 @@ class FileAnalyzer(ast.NodeVisitor):
             op = "%-format" if isinstance(node.op, ast.Mod) else "concat"
             t = t.step(self.fs(node, "propagate", op))
         return t
+
+    def _is_path_object(self, node: ast.AST) -> bool:
+        """True for a name bound to a pathlib.Path, a `Path(...)` call, or a `a / b` chain starting from one."""
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            return self._is_path_object(node.left)
+        if isinstance(node, ast.Call):
+            return (self.qual(node.func) or "") in {"pathlib.Path", "pathlib.PosixPath", "pathlib.PurePath"}
+        return self.qual(node) == "pathlib.Path"
 
     def e_BoolOp(self, node: ast.BoolOp) -> Taint:
         t = EMPTY
@@ -970,7 +1060,8 @@ class FileAnalyzer(ast.NodeVisitor):
             else:
                 per_key[ck] = vt
             t = t.union(vt.plain())
-        if t and keyed:
+        if keyed:
+            # also when nothing is tainted yet: `m = {}; m["k"] = tainted` must keep per-key detail
             return Taint(t.labels, t.cleared, t.trail, tuple(sorted(per_key.items())))
         return t
 
@@ -1175,8 +1266,9 @@ class FileAnalyzer(ast.NodeVisitor):
         recv_taint = EMPTY
         if isinstance(node.func, ast.Attribute):
             recv_taint = self.eval(node.func.value)
+        reported_cwes: Set[str] = set()
         for sink in sinks:
-            if not self._gate_open(sink, node):
+            if sink.cwe in reported_cwes or not self._gate_open(sink, node):
                 continue
             hit: Optional[Taint] = None
             if sink.recv and recv_taint and not recv_taint.is_safe_for(sink.cwe):
@@ -1189,6 +1281,9 @@ class FileAnalyzer(ast.NodeVisitor):
                 for idx in sink.args:
                     if idx < len(arg_taints):
                         at = arg_taints[idx]
+                        if sink.rule_id == "SL-XSS-003" and idx == 0 and isinstance(node.args[0], (ast.Tuple, ast.List)) and node.args[0].elts:
+                            # make_response((body, headers, ...)): only the body is HTML
+                            at = self.eval(node.args[0].elts[0])
                         if at and not at.is_safe_for(sink.cwe):
                             hit = at if hit is None else hit.union(at)
             for k in sink.kwargs:
@@ -1215,7 +1310,7 @@ class FileAnalyzer(ast.NodeVisitor):
                                 bucket.append(inner)
             else:
                 self._report_sink(sink, node, hit, node)
-            break  # one finding per call per sink group
+            reported_cwes.add(sink.cwe)   # one finding per call per CWE (sinks of one qualname are alternatives)
 
     def _report_sink(self, sink: Sink, node: ast.AST, t: Taint, sink_expr: ast.AST) -> None:
         flow = list(t.trail) + [self.fs(node, "sink", f"{sink.qualname}")]
@@ -1331,7 +1426,7 @@ def _summary_state(summaries: Dict[str, Summary], fields: Dict[str, Taint]) -> L
         s = summaries[key]
         if s is None:
             continue
-        out.append((key, frozenset(s.returns_from), s.returns_source, s.sanitizes,
+        out.append((key, frozenset(s.returns_from), s.returns_source, s.sanitizes, s.returns_type,
                     tuple(sorted((i, len(v)) for i, v in s.sinks_from.items()))))
     return out
 
