@@ -6,9 +6,9 @@
       "tool": {
         "driver": {
           "name": "sinkline",
-          "version": "0.4.0",
+          "version": "0.5.0",
           "informationUri": "https://github.com/samiali38183/sinkline",
-          "semanticVersion": "0.4.0",
+          "semanticVersion": "0.5.0",
           "rules": [
             {
               "id": "SL-SQLI-001",
@@ -384,8 +384,8 @@
                 "text": "Reflected XSS: tainted body in HTTP response. OWASP A03:2021 Injection; CWE-79 Cross-Site Scripting."
               },
               "help": {
-                "text": "Render through a template with auto-escaping or escape with markupsafe.escape().",
-                "markdown": "**Fix:** Render through a template with auto-escaping or escape with markupsafe.escape()."
+                "text": "Keep the template a constant and pass user data as variables so Jinja auto-escapes it.",
+                "markdown": "**Fix:** Keep the template a constant and pass user data as variables so Jinja auto-escapes it."
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -736,6 +736,32 @@
                 ],
                 "security-severity": "5.5",
                 "precision": "medium"
+              }
+            },
+            {
+              "id": "SL-PATH-008",
+              "name": "Pathtraversal:filereadonataintedpath",
+              "shortDescription": {
+                "text": "Path traversal: file read on a tainted path"
+              },
+              "fullDescription": {
+                "text": "Path traversal: file read on a tainted path. OWASP A01:2021 Broken Access Control; CWE-22 Path Traversal."
+              },
+              "help": {
+                "text": "Path traversal: file read on a tainted path",
+                "markdown": "Path traversal: file read on a tainted path"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "external/owasp/A01-2021",
+                  "external/cwe/cwe-22"
+                ],
+                "security-severity": "8.0",
+                "precision": "high"
               }
             },
             {
@@ -1384,7 +1410,7 @@
         },
         {
           "ruleId": "SL-DESER-004",
-          "ruleIndex": 33,
+          "ruleIndex": 34,
           "level": "error",
           "message": {
             "text": "torch.load on tainted path (pickle-backed): fastapi.Form reaches torch.load without a sanitizer for CWE-502. Fix: Use weights_only=True or safetensors."
@@ -1482,7 +1508,7 @@
         },
         {
           "ruleId": "SL-DESER-003",
-          "ruleIndex": 32,
+          "ruleIndex": 33,
           "level": "error",
           "message": {
             "text": "yaml.load without SafeLoader on tainted data: fastapi.Form reaches yaml.load without a sanitizer for CWE-502. Fix: Use yaml.safe_load(data)."
@@ -2882,7 +2908,7 @@
         },
         {
           "ruleId": "SL-DESER-001",
-          "ruleIndex": 30,
+          "ruleIndex": 31,
           "level": "error",
           "message": {
             "text": "Deserialization of tainted data (pickle): flask.request.data reaches pickle.loads without a sanitizer for CWE-502. Fix: Never unpickle untrusted bytes. Use JSON or a schema-validated format."
@@ -2962,7 +2988,7 @@
         },
         {
           "ruleId": "SL-DESER-003",
-          "ruleIndex": 32,
+          "ruleIndex": 33,
           "level": "error",
           "message": {
             "text": "yaml.load without SafeLoader on tainted data: flask.request.data reaches yaml.load without a sanitizer for CWE-502. Fix: Use yaml.safe_load(data)."
@@ -4339,6 +4365,122 @@
                   "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
+                  "startLine": 211,
+                  "startColumn": 16,
+                  "endLine": 211,
+                  "endColumn": 43
+                }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 208,
+                            "startColumn": 11
+                          }
+                        },
+                        "message": {
+                          "text": "source: flask.request.args"
+                        }
+                      },
+                      "importance": "essential"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 208,
+                            "startColumn": 11
+                          }
+                        },
+                        "message": {
+                          "text": "propagate: .get()"
+                        }
+                      },
+                      "importance": "important"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 211,
+                            "startColumn": 27
+                          }
+                        },
+                        "message": {
+                          "text": "propagate: concat"
+                        }
+                      },
+                      "importance": "important"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "hard_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 211,
+                            "startColumn": 16
+                          }
+                        },
+                        "message": {
+                          "text": "sink: sqlite3.Connection.execute"
+                        }
+                      },
+                      "importance": "essential"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "sinkline/v1": "81c93e19dac7f6b4"
+          },
+          "properties": {
+            "confidence": "high",
+            "owasp": "A03:2021",
+            "cwe": "CWE-89",
+            "source": "flask.request.args",
+            "sink": "sqlite3.Connection.execute"
+          }
+        },
+        {
+          "ruleId": "SL-SQLI-001",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "SQL built from tainted data: flask.request.args reaches sqlite3.Connection.execute without a sanitizer for CWE-89. Fix: Use parameterized queries: conn.execute('... WHERE id = ?', (user_id,))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "hard_app.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
                   "startLine": 232,
                   "startColumn": 5,
                   "endLine": 232,
@@ -5200,7 +5342,7 @@
         },
         {
           "ruleId": "SL-DESER-001",
-          "ruleIndex": 30,
+          "ruleIndex": 31,
           "level": "error",
           "message": {
             "text": "Deserialization of tainted data (pickle): flask.request.data reaches pickle.loads without a sanitizer for CWE-502. Fix: Never unpickle untrusted bytes. Use JSON or a schema-validated format."
@@ -5280,7 +5422,7 @@
         },
         {
           "ruleId": "SL-DESER-003",
-          "ruleIndex": 32,
+          "ruleIndex": 33,
           "level": "error",
           "message": {
             "text": "yaml.load without SafeLoader on tainted data: flask.request.data reaches yaml.load without a sanitizer for CWE-502. Fix: Use yaml.safe_load(data)."
@@ -5654,7 +5796,7 @@
         },
         {
           "ruleId": "SL-PATH-009",
-          "ruleIndex": 28,
+          "ruleIndex": 29,
           "level": "error",
           "message": {
             "text": "Tar Slip: extractall of tainted archive: fastapi.Form reaches tarfile.TarFile.extractall without a sanitizer for CWE-22. Fix: Use filter='data' (Python 3.12+) or validate each member path."
@@ -5770,7 +5912,7 @@
         },
         {
           "ruleId": "SL-PATH-009",
-          "ruleIndex": 28,
+          "ruleIndex": 29,
           "level": "error",
           "message": {
             "text": "Zip Slip: extractall of tainted archive: fastapi.Form reaches zipfile.ZipFile.extractall without a sanitizer for CWE-22. Fix: Validate each member: reject absolute paths and '..' before extracting."
@@ -6176,6 +6318,122 @@
             "cwe": "CWE-22",
             "source": "sys.argv",
             "sink": "builtins.open"
+          }
+        },
+        {
+          "ruleId": "SL-XSS-003",
+          "ruleIndex": 14,
+          "level": "error",
+          "message": {
+            "text": "Reflected XSS: tainted body in HTTP response: flask.request.args reaches flask.render_template_string without a sanitizer for CWE-79. Fix: Keep the template a constant and pass user data as variables so Jinja auto-escapes it."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "flask_app.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 169,
+                  "startColumn": 12,
+                  "endLine": 169,
+                  "endColumn": 65
+                }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "flask_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 168,
+                            "startColumn": 12
+                          }
+                        },
+                        "message": {
+                          "text": "source: flask.request.args"
+                        }
+                      },
+                      "importance": "essential"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "flask_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 168,
+                            "startColumn": 12
+                          }
+                        },
+                        "message": {
+                          "text": "propagate: .get()"
+                        }
+                      },
+                      "importance": "important"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "flask_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 169,
+                            "startColumn": 35
+                          }
+                        },
+                        "message": {
+                          "text": "propagate: concat"
+                        }
+                      },
+                      "importance": "important"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "flask_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 169,
+                            "startColumn": 12
+                          }
+                        },
+                        "message": {
+                          "text": "sink: flask.render_template_string"
+                        }
+                      },
+                      "importance": "essential"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "sinkline/v1": "4b25d199c26dad87"
+          },
+          "properties": {
+            "confidence": "high",
+            "owasp": "A03:2021",
+            "cwe": "CWE-79",
+            "source": "flask.request.args",
+            "sink": "flask.render_template_string"
           }
         },
         {
@@ -6876,7 +7134,7 @@
         },
         {
           "ruleId": "SL-SSRF-001",
-          "ruleIndex": 36,
+          "ruleIndex": 37,
           "level": "error",
           "message": {
             "text": "SSRF: tainted URL fetched server-side: flask.request.args reaches requests.get without a sanitizer for CWE-918. Fix: Allow-list hosts/schemes, resolve DNS and reject private ranges, disable redirects."
@@ -6956,7 +7214,7 @@
         },
         {
           "ruleId": "SL-SSRF-001",
-          "ruleIndex": 36,
+          "ruleIndex": 37,
           "level": "error",
           "message": {
             "text": "SSRF: tainted URL fetched server-side: flask.request.args reaches requests.get without a sanitizer for CWE-918. Fix: Allow-list hosts/schemes, resolve DNS and reject private ranges, disable redirects."
@@ -7437,6 +7695,104 @@
           }
         },
         {
+          "ruleId": "SL-XSS-003",
+          "ruleIndex": 14,
+          "level": "error",
+          "message": {
+            "text": "Reflected XSS: tainted body in HTTP response: flask.request.args reaches flask.render_template_string without a sanitizer for CWE-79. Fix: Keep the template a constant and pass user data as variables so Jinja auto-escapes it."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "smoke_app.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 63,
+                  "startColumn": 12,
+                  "endLine": 63,
+                  "endColumn": 79
+                }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "smoke_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 63,
+                            "startColumn": 47
+                          }
+                        },
+                        "message": {
+                          "text": "source: flask.request.args"
+                        }
+                      },
+                      "importance": "essential"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "smoke_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 63,
+                            "startColumn": 47
+                          }
+                        },
+                        "message": {
+                          "text": "propagate: .get()"
+                        }
+                      },
+                      "importance": "important"
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "smoke_app.py",
+                            "uriBaseId": "%SRCROOT%"
+                          },
+                          "region": {
+                            "startLine": 63,
+                            "startColumn": 12
+                          }
+                        },
+                        "message": {
+                          "text": "sink: flask.render_template_string"
+                        }
+                      },
+                      "importance": "essential"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "sinkline/v1": "d5ae7a3ec0493c8a"
+          },
+          "properties": {
+            "confidence": "high",
+            "owasp": "A03:2021",
+            "cwe": "CWE-79",
+            "source": "flask.request.args",
+            "sink": "flask.render_template_string"
+          }
+        },
+        {
           "ruleId": "SL-XSS-004",
           "ruleIndex": 15,
           "level": "error",
@@ -7536,7 +7892,7 @@
         },
         {
           "ruleId": "SL-SSRF-001",
-          "ruleIndex": 36,
+          "ruleIndex": 37,
           "level": "error",
           "message": {
             "text": "SSRF: tainted URL fetched server-side: flask.request.args reaches requests.get without a sanitizer for CWE-918. Fix: Allow-list hosts/schemes, resolve DNS and reject private ranges, disable redirects."
@@ -7714,7 +8070,7 @@
         },
         {
           "ruleId": "SL-REDIR-001",
-          "ruleIndex": 29,
+          "ruleIndex": 30,
           "level": "warning",
           "message": {
             "text": "Open redirect: tainted redirect target: fastapi.Query reaches fastapi.responses.RedirectResponse without a sanitizer for CWE-601."
@@ -7794,7 +8150,7 @@
         },
         {
           "ruleId": "SL-REDIR-001",
-          "ruleIndex": 29,
+          "ruleIndex": 30,
           "level": "warning",
           "message": {
             "text": "Open redirect: tainted redirect target: request param.GET reaches django.http.HttpResponseRedirect without a sanitizer for CWE-601."
@@ -7892,7 +8248,7 @@
         },
         {
           "ruleId": "SL-REDIR-001",
-          "ruleIndex": 29,
+          "ruleIndex": 30,
           "level": "warning",
           "message": {
             "text": "Open redirect: tainted redirect target: flask.request.args reaches flask.redirect without a sanitizer for CWE-601. Fix: Allow-list targets or verify urlparse(target).netloc in {'', request.host}."
@@ -7990,7 +8346,7 @@
         },
         {
           "ruleId": "SL-CRYPTO-001",
-          "ruleIndex": 38,
+          "ruleIndex": 39,
           "level": "warning",
           "message": {
             "text": "Tainted secret hashed with MD5: flask.request.form reaches hashlib.md5 without a sanitizer for CWE-328. Fix: Use hashlib.sha256 or, for passwords, argon2/bcrypt/scrypt."
@@ -8106,7 +8462,7 @@
         },
         {
           "ruleId": "SL-REDIR-001",
-          "ruleIndex": 29,
+          "ruleIndex": 30,
           "level": "warning",
           "message": {
             "text": "Open redirect: tainted redirect target: flask.request.args reaches flask.redirect without a sanitizer for CWE-601. Fix: Allow-list targets or verify urlparse(target).netloc in {'', request.host}."
@@ -8204,7 +8560,7 @@
         },
         {
           "ruleId": "SL-REDIR-001",
-          "ruleIndex": 29,
+          "ruleIndex": 30,
           "level": "warning",
           "message": {
             "text": "Open redirect: tainted redirect target: flask.request.args reaches flask.redirect without a sanitizer for CWE-601. Fix: Allow-list targets or verify urlparse(target).netloc in {'', request.host}."

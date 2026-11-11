@@ -16,6 +16,14 @@
   └ sink       app/app.py:265  search_query = db.engine.execute(str_query)  # execute
   fix: Use parameterized queries; never format user input into the SQL string.
 
+[HIGH] SL-XSS-003 A03:2021 CWE-79  app/app.py:114:12
+  Reflected XSS: tainted template source rendered as HTML
+  flask.request.url reaches flask.render_template_string without a sanitizer for CWE-79.
+  ┌ source     app/app.py:112  ''' % request.url  # flask.request.url
+  │ propagate  app/app.py:103  template = '''<html>  # %-format
+  └ sink       app/app.py:114  return render_template_string(template, dir = dir, help = help, locals = locals),404  # flask.render_template_string
+  fix: Keep the template a constant and pass user data as variables so Jinja auto-escapes it.
+
 [HIGH] SL-XSS-004 A03:2021 CWE-79  app/app.py:190:13
   Reflected XSS: tainted string returned from view
   flask.request.json reaches __return_http__ without a sanitizer for CWE-79.
@@ -37,5 +45,5 @@
   └ sink       app/app.py:141  hash_pass = hashlib.md5(password).hexdigest()  # hashlib.md5
   fix: Use hashlib.sha256 or, for passwords, argon2/bcrypt/scrypt.
 
-4 finding(s) in 3 file(s), 57 function(s) summarized
-by OWASP: A02:2021 Cryptographic Failures: 1 · A03:2021 Injection: 3
+5 finding(s) in 3 file(s), 57 function(s) summarized
+by OWASP: A02:2021 Cryptographic Failures: 1 · A03:2021 Injection: 4

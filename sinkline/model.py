@@ -177,7 +177,7 @@ SINKS: List[Sink] = [
     _s("markupsafe.Markup", "SL-XSS-001", "Tainted data marked safe for HTML", "A03:2021", "CWE-79", "high"),
     _s("django.utils.safestring.mark_safe", "SL-XSS-001", "Tainted data marked safe for HTML", "A03:2021", "CWE-79", "high"),
     _s("django.utils.html.format_html", "SL-XSS-002", "format_html with tainted format string", "A03:2021", "CWE-79", "high"),
-    _s("flask.render_template_string", "SL-XSS-003", "Reflected XSS: tainted template source rendered as HTML", "A03:2021", "CWE-79", "high",
+    _s("flask.render_template_string", "SL-XSS-003", "Reflected XSS: tainted body in HTTP response", "A03:2021", "CWE-79", "high",
        fix="Keep the template a constant and pass user data as variables so Jinja auto-escapes it."),
     _s("flask.make_response", "SL-XSS-003", "Reflected XSS: tainted body in HTTP response", "A03:2021", "CWE-79", "high",
        fix="Render through a template with auto-escaping or escape with markupsafe.escape()."),
