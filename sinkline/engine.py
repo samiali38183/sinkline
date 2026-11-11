@@ -36,7 +36,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, Union
 
@@ -48,11 +48,17 @@ from .model import (
     Sink,
     build_indexes,
 )
-from .resolve import Resolver, Scope
+from .resolve import INSTANCE_TYPES, Resolver, Scope
 
 _SOURCES, _SINKS, _SANITIZERS = build_indexes()
 
 MAX_LOOP_ROUNDS = 3
+
+# Methods that keep taint but return a container or JSON-like value, not a string a view would serve as HTML.
+NON_STRING_METHODS = frozenset({
+    "split", "rsplit", "splitlines", "partition", "rpartition", "items", "values", "keys", "copy",
+    "getlist", "to_dict", "dict", "json", "get_json", "readlines",
+})
 MAX_FLOW_STEPS = 24
 MAX_SUMMARY_ROUNDS = 10
 
@@ -68,6 +74,9 @@ class Taint:
     trail: Tuple[FlowStep, ...] = ()       # provenance
     # per-key taint for dict literals with constant string keys; None = not key-sensitive
     keys: Optional[Tuple[Tuple[str, "Taint"], ...]] = None
+    # (value,) when this clean variable is a known constant (str/int/bool/None/tuple); used to prune
+    # branches whose condition is statically decided, e.g. `if 7 * 42 - num > 200`
+    const: Optional[Tuple[object, ...]] = None
 
     def __bool__(self) -> bool:
         return bool(self.labels) and "*" not in self.cleared
@@ -77,6 +86,8 @@ class Taint:
 
     def union(self, other: "Taint") -> "Taint":
         if not other.labels:
+            if not self.labels and self.const != other.const:
+                return replace(self, const=None)   # two clean values that may differ: no longer a known constant
             return self
         if not self.labels:
             return other
@@ -128,6 +139,7 @@ EMPTY = Taint(frozenset())
 # ---------------------------------------------------------------------------
 
 _MISSING = object()
+_UNK = object()   # 'not a known constant'
 
 
 @dataclass
@@ -141,6 +153,7 @@ class Summary:
     sanitizes: FrozenSet[str] = frozenset()               # if the function is itself a sanitizer wrapper
     is_route: bool = False
     returns_http: bool = False
+    returns_type: Optional[str] = None                    # receiver type of the returned object (conn = get_connection())
 
 
 @dataclass(frozen=True)
@@ -398,6 +411,10 @@ class FileAnalyzer(ast.NodeVisitor):
             # does this function look like a sanitizer wrapper? (returns the result of a sanitizer applied to a param)
             if t.cleared and t.labels and all(lab.startswith("param:") for lab in t.labels):
                 summ.sanitizes = t.cleared
+        if self.collect and summ is not None and isinstance(node.value, ast.Name):
+            rq = self.scope.lookup(node.value.id)
+            if rq in INSTANCE_TYPES:
+                summ.returns_type = rq
         if not self.collect and self.in_http_view and t and self._returns_html(node.value, t):
             self._report_sink(_SINKS["__return_http__"][0], node, t, node.value)
 
@@ -409,15 +426,33 @@ class FileAnalyzer(ast.NodeVisitor):
         if isinstance(value, (ast.Dict, ast.List, ast.Tuple)):
             return False
         if isinstance(value, ast.Call):
-            q = self.qual(value.func) or ""
-            if any(k in q for k in ("jsonify", "JSONResponse", "json", "redirect", "render_template", "send_", "Response", "make_response", "abort")):
-                return False
-            if q.split(".")[-1] in {"str", "format"}:
-                return True
-            return False
+            return self._call_result_is_the_string(value)
         # f-string / concat / % formatting / plain tainted name
         # Flask and Django serve a returned str as text/html, so a bare tainted value is XSS too.
         return isinstance(value, (ast.JoinedStr, ast.BinOp, ast.Name, ast.Attribute, ast.Subscript))
+
+    def _call_result_is_the_string(self, call: ast.Call) -> bool:
+        """A returned call is XSS only when its result is (derived from) the tainted string itself.
+
+        Response constructors, redirects, JSON and template renderers are not: the first kind is
+        checked as a sink of its own (HTMLResponse, make_response, ...), the rest do not produce
+        attacker-controlled HTML from a tainted argument. An unknown function is not guessed at,
+        because `render(request, "x.html", {"q": q})` passes taint in and returns a safe response.
+        """
+        q = self.qual(call.func) or ""
+        if any(k in q for k in ("jsonify", "JSONResponse", "json", "redirect", "render", "send_", "Response", "make_response", "abort", "url_for", "TemplateResponse")):
+            return False
+        if self.lookup_sink(q) or self.lookup_sanitizer(q) is not None:
+            return False
+        last = call.func.attr if isinstance(call.func, ast.Attribute) else q.split(".")[-1]
+        if last in {"str", "format", "bytes"}:
+            return True
+        if isinstance(call.func, ast.Attribute):
+            if self._source_taint(q, call.func):        # request.args.get("q")
+                return last not in NON_STRING_METHODS
+            if last in STR_PROPAGATING_METHODS and last not in NON_STRING_METHODS:
+                return bool(self.eval(call.func.value))  # name.strip(), request.args.get("q").strip()
+        return self._summary_for(call.func, q) is not None  # helper(name)
 
     # -- statements ----------------------------------------------------------
     def visit_Assign(self, node: ast.Assign) -> None:
@@ -429,7 +464,10 @@ class FileAnalyzer(ast.NodeVisitor):
                 if isinstance(tgt, ast.Name) and cq:
                     self.resolver.bind_instance(tgt.id, cq, self.scope)
                     inst = self.resolver.qualname(node.value, self.scope)
-                    if inst and inst != cq:
+                    helper = self._summary_for(node.value.func, cq)
+                    if helper is not None and helper.returns_type:
+                        self.scope.bind(tgt.id, helper.returns_type)   # conn = get_connection()
+                    elif inst and inst != cq:
                         self.scope.bind(tgt.id, inst)
                     else:
                         # user-defined class? bind the instance name to the class so h.method resolves to Class.method
@@ -437,8 +475,17 @@ class FileAnalyzer(ast.NodeVisitor):
                             if any(k.startswith(cand + ".") for k in self.summaries):
                                 self.scope.bind(tgt.id, cand)
                                 break
+        elif isinstance(node.value, ast.BinOp) and isinstance(node.value.op, ast.Div) and self._is_path_object(node.value.left):
+            # p = BASE / name  keeps the Path receiver type, so p.read_text() / p.exists() resolve to the Path sinks
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name):
+                    self.scope.bind(tgt.id, "pathlib.Path")
         for tgt in node.targets:
             self._assign_target(tgt, t, node)
+        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and not t and t.keys is None:
+            cv = self._const_eval(node.value)
+            if cv is not _UNK and not self.loop_depth:
+                self.env[node.targets[0].id] = Taint(frozenset(), const=(cv,))
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         if node.value is not None:
@@ -558,6 +605,7 @@ class FileAnalyzer(ast.NodeVisitor):
             self.visit(s)
 
     def _loop(self, body) -> None:
+        self._forget_consts(self._assigned_names(body))
         self.loop_depth += 1
         for _ in range(MAX_LOOP_ROUNDS):
             before = dict(self.env)
@@ -565,6 +613,7 @@ class FileAnalyzer(ast.NodeVisitor):
                 self.visit(s)
             if self.env == before:
                 break
+        self._forget_consts(self._assigned_names(body))
         self.loop_depth -= 1
 
     def visit_With(self, node: ast.With) -> None:
@@ -585,8 +634,118 @@ class FileAnalyzer(ast.NodeVisitor):
 
     visit_AsyncWith = visit_With  # type: ignore[assignment]
 
+    # -- constant folding (branch pruning) ------------------------------------
+    def _const_eval(self, node: Optional[ast.AST]) -> object:
+        """Value of a side-effect-free expression built from literals and known-constant locals, else _UNK."""
+        try:
+            return self._const_eval_inner(node)
+        except Exception:  # any evaluation problem just means "not a known constant"
+            return _UNK
+
+    def _const_eval_inner(self, node: Optional[ast.AST]) -> object:
+        if isinstance(node, ast.Constant):
+            return node.value if isinstance(node.value, (str, int, bool, type(None))) else _UNK
+        if isinstance(node, ast.Name):
+            t = self.env.get(node.id)
+            if t is not None and t.const is not None and not t.labels:
+                return t.const[0]
+            return _UNK
+        if isinstance(node, (ast.Tuple, ast.List)):
+            vals = [self._const_eval_inner(e) for e in node.elts]
+            return _UNK if any(v is _UNK for v in vals) else tuple(vals)
+        if isinstance(node, ast.UnaryOp):
+            v = self._const_eval_inner(node.operand)
+            if v is _UNK:
+                return _UNK
+            if isinstance(node.op, ast.Not):
+                return not v
+            if isinstance(node.op, ast.USub) and isinstance(v, int):
+                return -v
+            return _UNK
+        if isinstance(node, ast.BinOp):
+            a, b = self._const_eval_inner(node.left), self._const_eval_inner(node.right)
+            if a is _UNK or b is _UNK:
+                return _UNK
+            bop = type(node.op)
+            if bop is ast.Add and type(a) is type(b) and isinstance(a, (int, str, tuple)):
+                return a + b  # type: ignore[operator]
+            if isinstance(a, int) and isinstance(b, int) and not isinstance(a, bool) and not isinstance(b, bool):
+                if bop is ast.Sub:
+                    return a - b
+                if bop is ast.Mult and abs(a) < 10**6 and abs(b) < 10**6:
+                    return a * b
+                if bop is ast.FloorDiv and b != 0:
+                    return a // b
+                if bop is ast.Mod and b != 0:
+                    return a % b
+            return _UNK
+        if isinstance(node, ast.BoolOp):
+            vals = [self._const_eval_inner(v) for v in node.values]
+            if any(v is _UNK for v in vals):
+                return _UNK
+            return all(vals) if isinstance(node.op, ast.And) else any(vals)
+        if isinstance(node, ast.Compare):
+            left = self._const_eval_inner(node.left)
+            result = True
+            for op, comp in zip(node.ops, node.comparators):
+                right = self._const_eval_inner(comp)
+                if left is _UNK or right is _UNK:
+                    return _UNK
+                if isinstance(op, ast.In):
+                    r = left in right  # type: ignore[operator]
+                elif isinstance(op, ast.NotIn):
+                    r = left not in right  # type: ignore[operator]
+                elif isinstance(op, ast.Eq):
+                    r = left == right
+                elif isinstance(op, ast.NotEq):
+                    r = left != right
+                elif isinstance(op, (ast.Lt, ast.LtE, ast.Gt, ast.GtE)):
+                    if type(left) is not type(right) or not isinstance(left, (int, str)):
+                        return _UNK
+                    if isinstance(op, ast.Lt):
+                        r = left < right  # type: ignore[operator]
+                    elif isinstance(op, ast.LtE):
+                        r = left <= right  # type: ignore[operator]
+                    elif isinstance(op, ast.Gt):
+                        r = left > right  # type: ignore[operator]
+                    else:
+                        r = left >= right  # type: ignore[operator]
+                else:
+                    return _UNK
+                if not r:
+                    result = False
+                left = right
+            return result
+        if isinstance(node, ast.Subscript) and isinstance(node.slice, (ast.Constant, ast.UnaryOp)):
+            base, idx = self._const_eval_inner(node.value), self._const_eval_inner(node.slice)
+            if isinstance(base, (str, tuple)) and isinstance(idx, int) and not isinstance(idx, bool):
+                return base[idx]
+            return _UNK
+        return _UNK
+
+    @staticmethod
+    def _assigned_names(body: List[ast.stmt]) -> Set[str]:
+        out: Set[str] = set()
+        for st in body:
+            for n in ast.walk(st):
+                if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+                    out.add(n.id)
+        return out
+
+    def _forget_consts(self, names: Iterable[str]) -> None:
+        for n in names:
+            t = self.env.get(n)
+            if t is not None and t.const is not None:
+                self.env[n] = replace(t, const=None)
+
     def visit_If(self, node: ast.If) -> None:
         self.eval(node.test)
+        decided = self._const_eval(node.test)
+        if decided is not _UNK:
+            # statically decided condition: only the live branch runs (the dead one is not analyzed)
+            for st in (node.body if decided else node.orelse):
+                self.visit(st)
+            return
         guard_true, guard_false = self._guards_from_test(node.test)
 
         pre_env, pre_guards = dict(self.env), dict(self.guards)
@@ -768,6 +927,11 @@ class FileAnalyzer(ast.NodeVisitor):
                 n2 = name_of(right)
                 if n2:
                     f[n2] = frozenset({"CWE-22"})
+            # "'" in x -> the false branch has no quote to break out of an XPath string literal
+            if isinstance(left, ast.Constant) and left.value in ("'", '"') and isinstance(op, (ast.In, ast.NotIn)):
+                n2 = name_of(right)
+                if n2:
+                    (f if isinstance(op, ast.In) else t)[n2] = frozenset({"CWE-643"})
             if isinstance(left, ast.Constant) and isinstance(left.value, str) and left.value in ("..",) and isinstance(op, ast.NotIn):
                 n2 = name_of(right)
                 if n2:
@@ -818,11 +982,92 @@ class FileAnalyzer(ast.NodeVisitor):
 
     visit_TryStar = visit_Try  # type: ignore[assignment]
 
-    def visit_Match(self, node: ast.Match) -> None:  # pragma: no cover
-        self.eval(node.subject)
-        for c in node.cases:
-            for s in c.body:
+    def visit_Match(self, node: ast.Match) -> None:
+        """`match` is a branch: each case starts from the state before it, and the state after is
+        the join of every case that does not exit, plus the fall-through state when no case is
+        irrefutable (no `case _` / bare capture)."""
+        subj = self.eval(node.subject)
+        live = self._static_case(node)
+        if live is not None:
+            for st in live.body:
+                self.visit(st)
+            return
+        pre_env, pre_guards = dict(self.env), dict(self.guards)
+        outcomes: List[Tuple[Dict[str, Taint], Dict[str, FrozenSet[str]]]] = []
+        exhaustive = False
+        for case in node.cases:
+            self.env, self.guards = dict(pre_env), dict(pre_guards)
+            self._bind_pattern(case.pattern, subj, node)
+            if case.guard is not None:
+                self.eval(case.guard)
+            for s in case.body:
                 self.visit(s)
+            if not self._block_exits(case.body):
+                outcomes.append((self.env, self.guards))
+            if case.guard is None and self._irrefutable(case.pattern):
+                exhaustive = True
+        if not exhaustive:
+            outcomes.append((pre_env, pre_guards))
+        if not outcomes:  # every case exits
+            self.env, self.guards = pre_env, pre_guards
+            return
+        env, guards = outcomes[0]
+        for e, g in outcomes[1:]:
+            env = self._join_envs(env, e)
+            guards = {k: v & g[k] for k, v in guards.items() if k in g}
+        self.env, self.guards = env, guards
+
+    def _static_case(self, node: ast.Match) -> Optional[ast.match_case]:
+        """The case that must run when the subject is a known constant and every case up to it is a plain
+        literal / wildcard pattern without a guard; None when that cannot be decided."""
+        val = self._const_eval(node.subject)
+        if val is _UNK:
+            return None
+        for case in node.cases:
+            if case.guard is not None:
+                return None
+            m = self._pattern_matches(case.pattern, val)
+            if m is None:
+                return None
+            if m:
+                return case
+        return None
+
+    def _pattern_matches(self, pat: ast.AST, val: object) -> Optional[bool]:
+        if isinstance(pat, ast.MatchValue):
+            v = self._const_eval(pat.value)
+            return None if v is _UNK else (type(v) is type(val) and v == val)
+        if isinstance(pat, ast.MatchSingleton):
+            return val is pat.value
+        if isinstance(pat, ast.MatchAs) and pat.pattern is None and pat.name is None:
+            return True
+        if isinstance(pat, ast.MatchOr):
+            results = [self._pattern_matches(p, val) for p in pat.patterns]
+            if any(r is True for r in results):
+                return True
+            return None if any(r is None for r in results) else False
+        return None
+
+    def _bind_pattern(self, pattern: ast.AST, subj: Taint, node: ast.AST) -> None:
+        """Names captured by a pattern (`case str() as s`, `case [a, *rest]`, `case {"k": v, **rest}`) get the subject's taint."""
+        for sub in ast.walk(pattern):
+            name = None
+            if isinstance(sub, (ast.MatchAs, ast.MatchStar)):
+                name = sub.name
+            elif isinstance(sub, ast.MatchMapping):
+                name = sub.rest
+            if name:
+                t = subj.plain()
+                self.env[name] = t.step(self.fs(node, "propagate", f"matched into `{name}`")) if t else EMPTY
+                self.guards.pop(name, None)
+
+    @staticmethod
+    def _irrefutable(pattern: ast.AST) -> bool:
+        if isinstance(pattern, ast.MatchAs):
+            return pattern.pattern is None
+        if isinstance(pattern, ast.MatchOr):
+            return any(FileAnalyzer._irrefutable(p) for p in pattern.patterns)
+        return False
 
     # -- expressions ---------------------------------------------------------
     def eval(self, node: Optional[ast.AST]) -> Taint:
@@ -843,7 +1088,7 @@ class FileAnalyzer(ast.NodeVisitor):
 
     def e_Name(self, node: ast.Name) -> Taint:
         t = self.get(node.id)
-        if t:
+        if t or t.keys is not None:   # a clean dict still carries its per-key detail
             return t
         q = self.qual(node)
         return self._source_taint(q, node)
@@ -903,6 +1148,14 @@ class FileAnalyzer(ast.NodeVisitor):
             t = t.step(self.fs(node, "propagate", op))
         return t
 
+    def _is_path_object(self, node: ast.AST) -> bool:
+        """True for a name bound to a pathlib.Path, a `Path(...)` call, or a `a / b` chain starting from one."""
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            return self._is_path_object(node.left)
+        if isinstance(node, ast.Call):
+            return (self.qual(node.func) or "") in {"pathlib.Path", "pathlib.PosixPath", "pathlib.PurePath"}
+        return self.qual(node) == "pathlib.Path"
+
     def e_BoolOp(self, node: ast.BoolOp) -> Taint:
         t = EMPTY
         for v in node.values:
@@ -911,6 +1164,9 @@ class FileAnalyzer(ast.NodeVisitor):
 
     def e_IfExp(self, node: ast.IfExp) -> Taint:
         self.eval(node.test)
+        decided = self._const_eval(node.test)
+        if decided is not _UNK:
+            return self.eval(node.body if decided else node.orelse)
         return self.eval(node.body).union(self.eval(node.orelse))
 
     def e_Compare(self, node: ast.Compare) -> Taint:
@@ -970,7 +1226,8 @@ class FileAnalyzer(ast.NodeVisitor):
             else:
                 per_key[ck] = vt
             t = t.union(vt.plain())
-        if t and keyed:
+        if keyed:
+            # also when nothing is tainted yet: `m = {}; m["k"] = tainted` must keep per-key detail
             return Taint(t.labels, t.cleared, t.trail, tuple(sorted(per_key.items())))
         return t
 
@@ -1175,8 +1432,9 @@ class FileAnalyzer(ast.NodeVisitor):
         recv_taint = EMPTY
         if isinstance(node.func, ast.Attribute):
             recv_taint = self.eval(node.func.value)
+        reported_cwes: Set[str] = set()
         for sink in sinks:
-            if not self._gate_open(sink, node):
+            if sink.cwe in reported_cwes or not self._gate_open(sink, node):
                 continue
             hit: Optional[Taint] = None
             if sink.recv and recv_taint and not recv_taint.is_safe_for(sink.cwe):
@@ -1189,6 +1447,9 @@ class FileAnalyzer(ast.NodeVisitor):
                 for idx in sink.args:
                     if idx < len(arg_taints):
                         at = arg_taints[idx]
+                        if sink.rule_id == "SL-XSS-003" and idx == 0 and isinstance(node.args[0], (ast.Tuple, ast.List)) and node.args[0].elts:
+                            # make_response((body, headers, ...)): only the body is HTML
+                            at = self.eval(node.args[0].elts[0])
                         if at and not at.is_safe_for(sink.cwe):
                             hit = at if hit is None else hit.union(at)
             for k in sink.kwargs:
@@ -1215,7 +1476,7 @@ class FileAnalyzer(ast.NodeVisitor):
                                 bucket.append(inner)
             else:
                 self._report_sink(sink, node, hit, node)
-            break  # one finding per call per sink group
+            reported_cwes.add(sink.cwe)   # one finding per call per CWE (sinks of one qualname are alternatives)
 
     def _report_sink(self, sink: Sink, node: ast.AST, t: Taint, sink_expr: ast.AST) -> None:
         flow = list(t.trail) + [self.fs(node, "sink", f"{sink.qualname}")]
@@ -1331,7 +1592,7 @@ def _summary_state(summaries: Dict[str, Summary], fields: Dict[str, Taint]) -> L
         s = summaries[key]
         if s is None:
             continue
-        out.append((key, frozenset(s.returns_from), s.returns_source, s.sanitizes,
+        out.append((key, frozenset(s.returns_from), s.returns_source, s.sanitizes, s.returns_type,
                     tuple(sorted((i, len(v)) for i, v in s.sinks_from.items()))))
     return out
 

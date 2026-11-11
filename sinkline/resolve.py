@@ -47,7 +47,11 @@ _INSTANCE_OF = {
     "lxml.etree.fromstring": "lxml.etree._Element",
     "lxml.etree.parse": "lxml.etree._ElementTree",
     "argon2.PasswordHasher": "argon2.PasswordHasher",
+    "pathlib.Path": "pathlib.Path",
 }
+
+# every receiver type a name can be bound to; used to recognize a helper that returns one
+INSTANCE_TYPES = frozenset(_INSTANCE_OF.values())
 
 _BUILTINS = {
     "open", "eval", "exec", "compile", "input", "__import__", "str", "bytes", "bytearray",

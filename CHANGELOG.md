@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.5.0 (2026-11-11)
+
+External benchmark (OWASP BenchmarkPython v0.1, commit `f129148`, scored with `bench/external/score.py`, not the
+official scorer; see `bench/external/README.md`). On the 10 taint categories sinkline 0.4.1 scored TPR 0.41 /
+FPR 0.20 (TPR-FPR +0.21); 0.5.0 scores 0.73 / 0.21 (+0.52). Bandit 1.9.4 scores 0.13 / 0.06 (+0.07) and
+Semgrep OSS 1.185.0 (`p/python`, `p/owasp-top-ten`) 0.07 / 0.03 (+0.04). Over all 14 categories, including
+weak hash, weak PRNG, cookie flags and trust boundary that sinkline does not cover, 0.5.0 scores +0.27 and
+Bandit +0.36. The 0.5.0 changes were chosen by reading the 0.4.1 failures, so these numbers are not held out.
+The self-labeled corpus is unchanged (TP 60, FP 0, FN 1, TN 48; F1 0.992), and the README now puts the
+external result next to it.
+
+Analysis
+- A returned call result is XSS when it is the tainted string itself (`return request.args.get("q")`,
+  `.strip()`, `.format()`, `str()`, a user helper that returns its argument). Response constructors, redirects,
+  JSON and renderers are still excluded; an unknown call is not guessed at.
+- `HTMLResponse(content=...)`, `HttpResponse(content=...)`, `Response(response=...)` keyword bodies are sinks;
+  `render_template_string` with a tainted template is also reported as XSS (next to SSTI);
+  `make_response((body, headers))` only checks the body.
+- Dicts built by constant-key assignment (`m = {}; m["a"] = ...`) keep per-key taint (they were whole-container
+  tainted).
+- `match` is a branch: cases are joined (before, the last case silently overwrote earlier ones), captured names
+  take the subject's taint, and a `match` on a constant subject runs only the matching case.
+- Statically decided `if` / ternary conditions on literals and known-constant locals prune the dead branch.
+- Receiver types come through a helper that returns an instance (`conn = get_connection()`), and
+  `base / name` keeps the `pathlib.Path` type.
+- Sinks added: `codecs.open`, `elementpath.select` / `iter_select`, `lxml.etree._ElementTree.xpath`,
+  `pathlib.Path` read / write / open / unlink / exists / is_file (SL-PATH-008, 43 rules, 151 sink signatures).
+  A quote check (`"'" in x`) is a guard for XPath only.
+- Several sinks of one call qualname with different CWEs are now all reported (one finding per call per CWE).
+
+Supply chain
+- Every GitHub Action in `.github/workflows/*.yml` and `action.yml` is pinned by full commit SHA with a version
+  comment; workflow permissions are `{}` with per-job `contents: read` and `security-events: write` only on the
+  SARIF job; checkouts do not persist credentials. zizmor 1.32.0: no findings at the default persona (was 25,
+  12 high, 5 medium); 8 pedantic/auditor-only style notes remain (anonymous job definitions, undocumented permission
+  comments, concurrency limits).
+
+Tests 91 to 138.
+
 ## 0.4.1 (2026-11-10)
 
 Benchmark (`python bench/score.py`): recall 0.967 to 0.984, F1 0.983 to 0.992 (TP 59 to 60, FN 2 to 1);
