@@ -387,3 +387,95 @@ def test_sink_on_non_returned_unknown_object_is_not_guessed():
         return ""
     """)
     assert r == {}
+
+
+# ---- statically decided branches are pruned ----------------------------------------
+
+def _branch(cond_setup: str, test: str) -> dict:
+    return cwes_by_line(FLASK + f"""
+    @app.route('/')
+    def v():
+        param = request.args["q"]
+        {cond_setup}
+        if {test}:
+            bar = "const"
+        else:
+            bar = param
+        os.system(bar)
+    """)
+
+
+def test_constant_arithmetic_condition_picks_the_live_branch():
+    # 7*42 - 86 = 208 > 200: the "const" branch always runs
+    assert _branch("num = 86", "7 * 42 - num > 200") == {}
+    # 7*18 + 86 = 212 > 200 is true; with 'not' the tainted branch is live
+    assert list(_branch("num = 86", "not (7 * 18 + num > 200)").values()) == [{"CWE-78"}]
+
+
+def test_constant_string_membership_condition():
+    assert _branch('s = "This should never happen"', "'should' in s") == {}
+    assert list(_branch('s = "This should never happen"', "'should' not in s").values()) == [{"CWE-78"}]
+
+
+def test_unknown_condition_still_joins_both_branches():
+    assert list(_branch("", "request.args['x']").values()) == [{"CWE-78"}]
+
+
+def test_constant_reassigned_in_a_loop_is_not_trusted():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        param = request.args["q"]
+        n = 0
+        for _ in range(3):
+            if n > 0:
+                os.system(param)
+            n = n + 1
+    """)
+    assert list(r.values()) == [{"CWE-78"}]
+
+
+def test_constant_differing_between_branches_is_not_trusted():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        param = request.args["q"]
+        if request.args["m"]:
+            n = 1
+        else:
+            n = 2
+        if n > 1:
+            os.system(param)
+    """)
+    assert list(r.values()) == [{"CWE-78"}]
+
+
+def test_ternary_with_constant_condition():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        param = request.args["q"]
+        num = 106
+        bar = "safe" if 7 * 18 + num > 200 else param
+        os.system(bar)
+    """)
+    assert r == {}
+
+
+@needs_match
+def test_match_on_constant_subject_takes_the_matching_case():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        param = request.args["q"]
+        guess = "ABC"[1]
+        match guess:
+            case "A":
+                bar = param
+            case "B":
+                bar = "const"
+            case _:
+                bar = param
+        os.system(bar)
+    """)
+    assert r == {}
