@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.5.1 (2026-11-11)
+
+Fixes from an outside review of 0.5.0. Benchmarks are unchanged: corpus TP 60, FP 0, FN 1, TN 48 (P 1.000 /
+R 0.984 / F1 0.992); OWASP BenchmarkPython 10 taint categories TPR 0.73 / FPR 0.21 (per-test table identical to
+0.5.0). Tests 138 to 184.
+
+Behavior changes (read before upgrading a CI gate)
+- A path that does not exist now exits 2 with `path not found` (0.5.0 printed "0 finding(s) in 0 file(s)" and
+  exited 0). The GitHub Action therefore fails on a mistyped `path`.
+- `--fail-on` now exits 3 when no Python file was analyzed (empty directory, only unparseable files, everything
+  excluded by `--exclude-tests`). 0.5.0 exited 0. Without `--fail-on` the scan still exits 0, with a warning.
+- New `--fail-on-parse-error` (Action input `fail-on-parse-error`, default `false`): exit 3 if any file could not
+  be read or parsed. Without it, parse failures do not change the exit code, as before.
+- Exit codes are now documented: 0 clean, 1 findings at/above `--fail-on`, 2 error, 3 incomplete scan. An unwritable
+  `-o` file is exit 2 (it was a traceback).
+- Parse failures are listed on stderr (count and names), as `files_failed` next to `errors` in JSON, and as SARIF
+  `toolExecutionNotifications` with a file location (`SL-NOTIFY-PARSE`, plus `SL-NOTIFY-NOFILES` for an empty scan).
+  A file with null bytes no longer reports "line None".
+- The Action skips the SARIF upload when no report was written and names the failing exit code.
+- Public-project output changes (more findings, all through the fixes below): vulpy 3 to 5 findings, microblog 0 to 1,
+  dvpwa same count with a different source line. `docs/examples/` regenerated.
+
+Analysis
+- A lambda bound to a name and called (`f = lambda c: subprocess.run(c, shell=True); f(x)`) or called in place is
+  analyzed at the call with its arguments bound; 0.5.0 evaluated nothing inside a lambda. Not followed: lambdas passed as
+  callbacks, stored in containers or attributes, returned, or called from another function.
+- Calling a source attribute (`request.get_json()`, `request.get_data()`, `await request.post()`) now returns tainted
+  data. 0.5.0 lost the taint when the result was assigned or used in a `match` subject
+  (`match request.get_json(): case {"cmd": c}: os.system(c)` produced no finding); `request.get_json()["k"]`
+  written inline was already found. The `match` shape in the review (`match request.args.get("a"): case str() as s`)
+  was already handled in 0.5.0 and is now pinned by a test.
+- Summaries are now registered in a first round before names are resolved. In 0.5.0 a call in `good/libapi.py` to
+  `libuser.login` could resolve to a same-named function in a sibling package (`bad/libuser.py`) when the file
+  defining the right one sorted later, and the wrong sink stuck. Found while checking vulpy after the `get_json` fix.
+
+Docs
+- README: exit-code table, Action inputs, a prior-art note (Semgrep taint mode, CodeQL, Pysa, Joern) and a statement
+  that the Semgrep column is the default registry rules, not taint mode with custom rules.
+
 ## 0.5.0 (2026-11-11)
 
 External benchmark (OWASP BenchmarkPython v0.1, commit `f129148`, scored with `bench/external/score.py`, not the

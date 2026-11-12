@@ -17,7 +17,7 @@
   fix: Use parameterized queries; never format user input into the SQL string.
 
 [HIGH] SL-XSS-003 A03:2021 CWE-79  app/app.py:114:12
-  Reflected XSS: tainted template source rendered as HTML
+  Reflected XSS: tainted body in HTTP response
   flask.request.url reaches flask.render_template_string without a sanitizer for CWE-79.
   ┌ source     app/app.py:112  ''' % request.url  # flask.request.url
   │ propagate  app/app.py:103  template = '''<html>  # %-format

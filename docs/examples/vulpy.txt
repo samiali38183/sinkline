@@ -1,3 +1,12 @@
+[CRITICAL] SL-SQLI-001 A03:2021 CWE-89  bad/mod_api.py:39:11
+  SQL built from tainted data
+  flask.request.get_json reaches sqlite3.Cursor.execute (inside login, bad/libuser.py:12) without a sanitizer for CWE-89.
+  ┌ source     bad/mod_api.py:32  data = request.get_json()  # flask.request.get_json
+  │ propagate  bad/mod_api.py:32  data = request.get_json()  # assigned to `data`
+  │ call       bad/mod_api.py:39  key = libapi.keygen(data['username'], data['password'])  # passed as `username` to keygen()
+  └ sink       bad/libuser.py:12  user = c.execute("SELECT * FROM users WHERE username = '{}' and password = '{}'".format(username  # sqlite3.Cursor.execute inside login()
+  fix: Use parameterized queries: cursor.execute('... WHERE id = ?', (user_id,))
+
 [CRITICAL] SL-SQLI-001 A03:2021 CWE-89  bad/mod_user.py:20:20
   SQL built from tainted data
   flask.request.form reaches sqlite3.Cursor.execute (inside login, bad/libuser.py:12) without a sanitizer for CWE-89.
@@ -25,5 +34,14 @@
   └ sink       bad/libuser.py:53  c.execute("UPDATE users SET password = '{}' WHERE username = '{}'".format(password, username))  # sqlite3.Cursor.execute inside password_change()
   fix: Use parameterized queries: cursor.execute('... WHERE id = ?', (user_id,))
 
-3 finding(s) in 57 file(s), 216 function(s) summarized
-by OWASP: A03:2021 Injection: 3
+[MEDIUM] SL-PATH-007 A01:2021 CWE-22  bad/mod_api.py:39:11
+  Path built from tainted data
+  flask.request.get_json reaches pathlib.Path (inside keygen, bad/libapi.py:22) without a sanitizer for CWE-22.
+  ┌ source     bad/mod_api.py:32  data = request.get_json()  # flask.request.get_json
+  │ propagate  bad/mod_api.py:32  data = request.get_json()  # assigned to `data`
+  │ call       bad/mod_api.py:39  key = libapi.keygen(data['username'], data['password'])  # passed as `username` to keygen()
+  └ sink       bad/libapi.py:22  Path(keyfile).touch()  # pathlib.Path inside keygen()
+  fix: Resolve and check containment: (BASE / name).resolve().relative_to(BASE.resolve())
+
+5 finding(s) in 57 file(s), 216 function(s) summarized
+by OWASP: A01:2021 Broken Access Control: 1 · A03:2021 Injection: 4

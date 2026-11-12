@@ -1,7 +1,7 @@
 [CRITICAL] SL-SQLI-001 A03:2021 CWE-89  sqli/views.py:57:19
   SQL built from tainted data
-  request reaches cur.execute (inside Student.create, sqli/dao/student.py:45) without a sanitizer for CWE-89.
-  ┌ source     sqli/views.py:52  async def students(request: Request):  # HttpRequest parameter
+  request param.post reaches cur.execute (inside Student.create, sqli/dao/student.py:45) without a sanitizer for CWE-89.
+  ┌ source     sqli/views.py:55  data = await request.post()  # request param.post
   │ propagate  sqli/views.py:55  data = await request.post()  # assigned to `data`
   │ call       sqli/views.py:57  await Student.create(conn, data['name'])  # passed as `name` to Student.create()
   └ sink       sqli/dao/student.py:45  await cur.execute(q)  # cur.execute inside Student.create()

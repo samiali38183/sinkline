@@ -6,9 +6,9 @@
       "tool": {
         "driver": {
           "name": "sinkline",
-          "version": "0.5.0",
+          "version": "0.5.1",
           "informationUri": "https://github.com/samiali38183/sinkline",
-          "semanticVersion": "0.5.0",
+          "semanticVersion": "0.5.1",
           "rules": [
             {
               "id": "SL-SQLI-001",
@@ -1126,6 +1126,22 @@
                 ],
                 "security-severity": "5.5",
                 "precision": "medium"
+              }
+            }
+          ],
+          "notifications": [
+            {
+              "id": "SL-NOTIFY-PARSE",
+              "name": "FileNotAnalyzed",
+              "shortDescription": {
+                "text": "A file could not be read or parsed and was not analyzed."
+              }
+            },
+            {
+              "id": "SL-NOTIFY-NOFILES",
+              "name": "NoFilesAnalyzed",
+              "shortDescription": {
+                "text": "The scan analyzed no Python files."
               }
             }
           ]
