@@ -10,7 +10,7 @@ attacker-controlled input across functions and files and reports it only when it
 sink (SQL, shell, `eval`, file paths, redirects, deserialization, ...) without a sanitizer for that
 bug class. It exists because pattern linters flag every `cursor.execute` and reviewers stop reading.
 
-| benchmark | metric | sinkline 0.5.0 | bandit 1.9.4 | semgrep 1.185.0 (OSS) |
+| benchmark | metric | sinkline 0.5.1 | bandit 1.9.4 (default rules) | semgrep 1.185.0 (OSS, registry rules `p/python` + `p/owasp-top-ten`) |
 |---|---|---|---|---|
 | `bench/corpus/`: 109 lines, **labeled by the engine's author, not independent** | precision / recall / F1 | 1.000 / 0.984 / 0.992 | 0.623 / 0.541 / 0.579 (lenient) | not run |
 | **OWASP BenchmarkPython v0.1, independent**: the 10 taint categories (240 vulnerable, 437 safe cases) | TPR / FPR / TPR-FPR | 0.73 / 0.21 / +0.52 | 0.13 / 0.06 / +0.07 | 0.07 / 0.03 / +0.04 |
@@ -28,7 +28,7 @@ text, JSON, SARIF and HTML output; a GitHub Action and a pre-commit hook.
 [Sample HTML report](https://samiali38183.github.io/sinkline/) for the benchmark corpus.
 
 ```
-$ sinkline scan vulpy        # fportantier/vulpy @ 5249cc8, first of 3 findings
+$ sinkline scan vulpy        # fportantier/vulpy @ 5249cc8, one of 5 findings
 
 [CRITICAL] SL-SQLI-001 A03:2021 CWE-89  bad/mod_user.py:20:20
   SQL built from tainted data
@@ -157,6 +157,25 @@ few auth rules. Nothing is mapped to A04 (Insecure Design) or A06 (Vulnerable Co
 
 ## Results
 
+The 0.5.1 numbers are identical to 0.5.0 (the lambda and call-result fixes change no benchmark outcome;
+re-run for this release, per-test table byte-identical).
+
+**Prior art and how to read the Semgrep and Bandit columns.** Taint analysis for Python is not new:
+[Semgrep](https://docs.semgrep.dev/writing-rules/data-flow/taint-mode/overview) has a taint mode for custom
+rules (`mode: taint` with sources, sinks, sanitizers and propagators; per that page it follows data within one
+function in the open-source engine, and cross-function and cross-file tracking need Semgrep Pro);
+[CodeQL](https://codeql.github.com/docs/writing-codeql-queries/about-data-flow-analysis/) provides local and global
+data-flow and taint-tracking libraries; [Pysa](https://pyre-check.org/docs/pysa-basics/) is a
+source/sink/rule-driven taint analyzer for Python built on Pyre; and [Joern](https://docs.joern.io/) builds code
+property graphs with a taint-analysis engine. None of those was run here with custom rules. Semgrep OSS was run
+with only its default registry rulesets (`p/python`, `p/owasp-top-ten`), which contain few taint-mode rules, so the
+comparison favors sinkline on the taint categories. It is **not** a statement about Semgrep taint mode with rules
+written for this benchmark, or about CodeQL or Pysa, which would likely score much higher than the registry run.
+What sinkline offers is a built-in, zero-configuration model of Python web frameworks (sources, sinks and
+CWE-scoped sanitizers as data) with cross-file summaries and no query language to learn; it does not claim better
+analysis than those tools. The caveats above still apply: the labeled corpus is self-labeled, the 0.5.0 fixes were
+chosen from 0.4.1 failures on this same benchmark, and the scorer is not the official one.
+
 The corpus figures were reproduced with Python 3.12.2 (earlier runs on 3.10.11 and 3.13.1 gave
 identical results); the external-benchmark figures with Python 3.12.2 on 2026-11-11. Commands are in [Development](#development).
 
@@ -232,15 +251,15 @@ Cloned at the listed commits and scanned with `sinkline scan <dir>`; full output
 
 | repo | commit | findings | notes |
 |---|---|---|---|
-| [fportantier/vulpy](https://github.com/fportantier/vulpy) | `5249cc8` | 3 x CWE-89 (57 files, 216 functions) | all three in `bad/`, flowing `mod_user.py` to `libuser.py` across files; 0 findings in `good/` (re-scanned separately), which has the same function names |
+| [fportantier/vulpy](https://github.com/fportantier/vulpy) | `5249cc8` | 4 x CWE-89, 1 x CWE-22 (57 files, 216 functions) | all five in `bad/`; three flow `mod_user.py` to `libuser.py` across files, two are `request.get_json()` data in `bad/mod_api.py` (0.5.0 missed these: a call to a source method such as `get_json()` was not tainted); 0 findings in `good/` in a whole-tree scan, which has the same function names |
 | [we45/Vulnerable-Flask-App](https://github.com/we45/Vulnerable-Flask-App) | `b6a4f97` | 5: SSTI (CWE-1336), SQLi (CWE-89), XSS (CWE-79, two findings, one on the same template call as the SSTI), MD5 (CWE-328) | 4 CWEs in 2 OWASP categories (A02, A03); 0.4.1 reported 4 (the second XSS call-result finding is new in 0.5.0) |
 | [anxolerd/dvpwa](https://github.com/anxolerd/dvpwa) | `a1d8f89` | 1 x CWE-89, 1 x CWE-117 | aiohttp, async handlers |
-| [miguelgrinberg/microblog](https://github.com/miguelgrinberg/microblog) | `a975ef6` | 0 | the `urlsplit(next_page).netloc != ''` redirect check in `app/auth/routes.py` is treated as a guard |
+| [miguelgrinberg/microblog](https://github.com/miguelgrinberg/microblog) | `a975ef6` | 1 x CWE-918 (new in 0.5.1) | `request.get_json()` fields reach the query string of a fixed-host URL in `app/translate.py` (`translate()`). sinkline reports tainted data anywhere in an outbound URL as SSRF (the corpus labels `"https://api.internal/" + path` the same way), so this is parameter injection into a fixed host, not a proven SSRF. The `urlsplit(next_page).netloc != ''` redirect check in `app/auth/routes.py` is still treated as a guard |
 
-Three of these are intentionally vulnerable training apps. A clean result on `microblog` is
-consistent with the guard handling working, but zero findings is not proof the app is safe. No CVEs
-or confirmed real-world vulnerabilities are claimed. The 0.4.0 engine changes did not change any of
-these results (same findings, same output as `docs/examples/`).
+Three of these are intentionally vulnerable training apps. No CVEs or confirmed real-world vulnerabilities
+are claimed. Compared with 0.5.0, 0.5.1 adds the two vulpy `mod_api.py` findings and the microblog finding
+(all three through `request.get_json()`), and changes the source line shown for dvpwa from the handler parameter to
+`await request.post()`; `docs/examples/` was regenerated.
 
 ## Quick start
 
@@ -250,7 +269,7 @@ Python 3.9+, no dependencies.
 pip install git+https://github.com/samiali38183/sinkline
 sinkline scan path/to/app                       # text report with source to sink paths
 sinkline scan . --format sarif -o out.sarif      # upload to GitHub code scanning
-sinkline scan . --fail-on high                   # exit 1 for CI if anything high or critical
+sinkline scan . --fail-on high                   # exit 1 for CI if anything high or critical; 2 or 3 if nothing was scanned
 sinkline explain SL-CMDI-003                     # what a rule matches and why
 ```
 
@@ -260,7 +279,7 @@ To see it on the benchmark instead of your own code:
 git clone https://github.com/samiali38183/sinkline && cd sinkline
 pip install -e ".[dev]"
 sinkline scan bench/corpus/flask_app.py          # 22 findings, each with its flow
-pytest -q                                        # 138 tests including the corpus gate
+pytest -q                                        # 184 tests including the corpus gate
 python bench/score.py                            # precision 1.000  recall 0.984  F1 0.992
 ```
 
@@ -273,12 +292,30 @@ sinkline scan . --format html -o report.html     # self-contained shareable file
 sinkline scan . --format json -o base.json       # machine-readable, stable fingerprints
 sinkline scan . --baseline base.json             # only findings not in the baseline
 sinkline scan . --fail-on high                   # exit 1 at/above a severity
+sinkline scan . --fail-on high --fail-on-parse-error   # also exit 3 if any file could not be parsed
 sinkline scan . --min-confidence high            # drop low-confidence flows
 sinkline scan . --rule A03:2021 --rule CWE-79    # restrict by rule id, OWASP category or CWE
 sinkline scan . --exclude-tests
 sinkline rules                                   # 43 rules, 151 sink signatures, by OWASP category
 sinkline explain SL-CMDI-003
 ```
+
+#### Exit codes
+
+A CI gate must not pass because nothing was scanned, so `sinkline scan` distinguishes these cases:
+
+| code | meaning |
+|---|---|
+| 0 | scanned; no finding at or above `--fail-on` (or `--fail-on` not given) |
+| 1 | at least one finding at or above `--fail-on` |
+| 2 | error: path not found or unreadable, unreadable `--baseline`, unwritable `-o` file. Nothing is written to stdout. |
+| 3 | scan incomplete: a file could not be read or parsed and `--fail-on-parse-error` was given, or no Python file was analyzed and `--fail-on` was given |
+
+If several apply, 2 wins over 1, and 1 over 3. Files that fail to parse are always reported: count and names
+on stderr, in the `errors` / `files_failed` fields of the JSON report, and as SARIF
+`toolExecutionNotifications` (ids `SL-NOTIFY-PARSE`, `SL-NOTIFY-NOFILES`), but they change the exit
+code only with `--fail-on-parse-error`. A scan that analyzes zero files always prints a warning and exits 3 under
+`--fail-on`; `--exclude-tests` that excludes everything counts as zero files.
 
 Verified on `vulpy`: a JSON scan, then `--baseline` against it, reports 0 findings; `--fail-on high`
 exits 1 on the original scan.
@@ -290,7 +327,21 @@ As a GitHub Action:
   with:
     path: .
     fail-on: high
+    fail-on-parse-error: "true"   # optional, default "false"
 ```
+
+| input | default | meaning |
+|---|---|---|
+| `path` | `.` | file or directory to scan |
+| `fail-on` | empty (never fail on findings) | `low`, `medium`, `high` or `critical` |
+| `min-confidence` | `low` | `low`, `medium` or `high` |
+| `fail-on-parse-error` | `false` | `"true"`: fail the job if any file could not be read or parsed |
+
+The scan step records the CLI exit code (table above), the SARIF upload still runs when a report exists, and the
+last step fails the job with a message per code: 1 findings at or above `fail-on`; 2 the path could not be scanned
+(for example a typo in `path`; no report exists, so the upload is skipped); 3 the scan was incomplete
+(`fail-on-parse-error` with an unparseable file, or no Python file analyzed while `fail-on` is set). Since 0.5.1 a
+missing `path` fails the job, where 0.5.0 passed it.
 
 #### Using the GitHub Action safely
 
@@ -308,8 +359,8 @@ inputs through `env:` and uses them quoted:
   run: sinkline scan "$INPUT_PATH"
 ```
 
-`fail-on` and `min-confidence` are also checked against an allow-list (`low|medium|high|critical`
-and `low|medium|high`) and the job fails with an error on anything else. `tests/test_action.py` runs
+`fail-on`, `min-confidence` and `fail-on-parse-error` are also checked against an allow-list (`low|medium|high|critical`,
+`low|medium|high` and `true|false`) and the job fails with an error on anything else. `tests/test_action.py` runs
 `scripts/action-scan.sh` with hostile values and checks that nothing is executed and that each
 input reaches the CLI as a single argument. The same rule applies to your own workflows: never put
 `${{ github.event.* }}` or `${{ inputs.* }}` directly in `run:`. Versions before 0.4.1 used the
@@ -368,6 +419,12 @@ for f in res.findings:
     function after the nested `def` (a nested `def` sees the enclosing taint as of its definition);
   - module globals shared across requests (`CACHE["q"] = tainted` in one handler, read in another);
   - dynamic dispatch, `getattr`, `exec`-generated code, decorators that rewrite arguments.
+- **Lambdas are analyzed only where they are called by name.** `f = lambda c: os.system(c); f(x)` and
+  `(lambda c: ...)(x)` are analyzed at the call with the arguments bound, using the caller's variables at that call.
+  A lambda passed as a callback (`map`, `sorted(key=...)`, `Thread(target=...)`, `executor.submit`), stored in a
+  container or attribute, returned, or defined in one function and called in another is not followed.
+- **Exit codes cover what sinkline could parse.** A file that fails to parse (including newer syntax than the
+  running Python's `ast` accepts) is skipped; it is reported, and fails the run only with `--fail-on-parse-error`.
 - **Instance fields are per class, not per object.** No inheritance, no aliasing (`other = self`),
   no fields on non-`self` objects, and no call ordering: if `fire()` can run before `load()`, or
   `load()` is never called, the finding is still reported (at medium confidence).
@@ -403,7 +460,7 @@ Directions that follow from the limits above; none are implemented:
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                       # 138 tests: engine unit tests plus the corpus gate
+pytest -q                       # 184 tests: engine unit tests plus the corpus gate
 python bench/score.py -v        # corpus P/R/F1, per-CWE table, per-line FP/FN listing
 pip install ruff mypy && ruff check . && mypy
 pip install bandit && python bench/compare_bandit.py
@@ -411,11 +468,11 @@ pip install bandit && python bench/compare_bandit.py
 
 ```
 sinkline/
-  engine.py    ~1630 lines  abstract interpreter, summaries, fields, guards, fixpoint
+  engine.py    ~1720 lines  abstract interpreter, summaries, fields, guards, fixpoint
   model.py      ~440 lines  sources / sinks / sanitizers / OWASP+CWE table
   resolve.py    ~150 lines  import + alias + receiver-type resolution
-  report.py     ~220 lines  text / JSON / SARIF 2.1.0 / HTML
-  cli.py        ~130 lines
+  report.py     ~240 lines  text / JSON / SARIF 2.1.0 / HTML
+  cli.py        ~175 lines
 bench/
   corpus/       labeled ground truth (VULN:CWE-xx / SAFE tags) incl. cross-file + adversarial cases
   score.py      precision / recall / F1 per CWE

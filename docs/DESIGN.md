@@ -154,6 +154,10 @@ those annotated `int`/`float`/`bool`/`UUID`, which pydantic will have coerced. D
 * **Closures beyond definition-time capture.** A nested `def` starts from a copy of the enclosing
   function's taint at the point of the `def` (pass 2 only, minus its own parameters). Variables assigned
   in the enclosing function after the `def`, and closures returned and called elsewhere, are not tracked.
+* **Lambdas beyond direct calls.** `f = lambda c: sink(c); f(x)` and `(lambda c: sink(c))(x)` are analyzed
+  at the call site: the body is evaluated with the parameters bound to the argument taints (no summary, so it is
+  re-evaluated per call and sees the caller's variables as of the call; depth-limited to 3). A lambda passed as a
+  callback, stored in a container or attribute, or returned is not followed.
 * **Module globals across requests.** Writing `CACHE["q"]` in one handler and reading it in another.
 * **Key-sensitive containers beyond dict literals.** Lists, `dict(...)` calls and dicts built up in
   loops are tracked as a whole.
@@ -169,3 +173,8 @@ score keeps it visible instead of hiding it.
 * **sarif** — SARIF 2.1.0 with `codeFlows`/`threadFlows`, so GitHub code scanning renders the path
   step-by-step in the PR.
 * **html** — self-contained single file for sharing.
+
+Files that cannot be parsed (and a scan that analyzes no file) are part of the output, not silent: they appear on
+stderr, in the JSON `errors` / `files_failed` fields and as SARIF `toolExecutionNotifications`. Exit codes are
+0 clean, 1 findings at/above `--fail-on`, 2 error (missing or unreadable path), 3 incomplete scan
+(`--fail-on-parse-error`, or zero files analyzed under `--fail-on`); see the README table.
