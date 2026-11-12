@@ -622,3 +622,23 @@ def test_lambda_calling_another_lambda_and_self_recursion_terminates():
         loop(request.args["x"])
     """)
     assert r == {8: {"CWE-78"}}
+
+
+
+# ---- same-named modules in sibling packages must not leak into each other (vulpy bad/ vs good/) ----
+
+def test_sibling_package_resolution_does_not_depend_on_file_order(tmp_path):
+    from sinkline import scan_path
+    files = {
+        "bad/libuser.py": "import sqlite3\ndef login(u, p):\n    c = sqlite3.connect('d').cursor()\n    return c.execute(\"SELECT * FROM t WHERE u = '{}'\".format(u))\n",
+        "bad/libapi.py": "import libuser\ndef keygen(u, p=None):\n    return libuser.login(u, p)\n",
+        "good/libapi.py": "import libuser\ndef keygen(u, p=None):\n    return libuser.login(u, p)\n",
+        "good/libuser.py": "import sqlite3\ndef login(u, p):\n    c = sqlite3.connect('d').cursor()\n    return c.execute('SELECT * FROM t WHERE u = ?', (u,))\n",
+        "good/mod.py": "import libapi\nfrom flask import request\ndef route():\n    return libapi.keygen(request.args['u'], 'x')\n",
+        "bad/mod.py": "import libapi\nfrom flask import request\ndef route():\n    return libapi.keygen(request.args['u'], 'x')\n",
+    }
+    for name, body in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(body)
+    res = scan_path(str(tmp_path))
+    assert {f.file for f in res.findings} == {"bad/mod.py"}

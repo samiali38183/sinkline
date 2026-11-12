@@ -1693,6 +1693,17 @@ def _scan(items: List[Tuple[str, str]]) -> ScanResult:
 
     summaries: Dict[str, Summary] = {}
     fields: Dict[str, Taint] = {}
+    # Registration round: visit every file once so every function has a summary object before anything
+    # is resolved. Without it, a call in `good/libapi.py` to `libuser.login` is resolved while
+    # `good/libuser.py` (later in file order) has not been visited yet, falls back to an ambiguous alias and
+    # picks up `bad/libuser.py`'s sink; summaries only grow, so the wrong sink would survive the fixpoint.
+    # What the round learned is discarded; only the names stay.
+    for name, src, tree in trees:
+        FileAnalyzer(name, src, tree, summaries, collect=True, fields=fields).visit(tree)
+    for summ in {id(v): v for v in summaries.values() if v is not None}.values():
+        summ.returns_from, summ.returns_source, summ.sinks_from = set(), False, {}
+        summ.sanitizes, summ.returns_http, summ.returns_type = frozenset(), False, None
+    fields.clear()
     # Pass 1: summaries, re-run until no summary changes. Summaries only grow (sets of param
     # indexes and sink sites), so this terminates; the cap is a guard against pathological input.
     prev = None
