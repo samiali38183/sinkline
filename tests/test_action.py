@@ -146,3 +146,85 @@ def test_nonzero_exit_is_recorded_for_the_final_step(tmp_path, stub, rc):
     p, _ = _run(tmp_path, stub, rc=rc, path=".", fail_on="high", min_confidence="low")
     assert p.returncode == 0  # the SARIF upload step still has to run
     assert (tmp_path / "ghenv.txt").read_text(encoding="utf-8").strip() == f"SINKLINE_RC={rc}"
+
+
+# ---- fail-on-parse-error input and real exit codes ------------------------------------------
+
+@needs_bash
+def test_fail_on_parse_error_true_adds_the_flag(tmp_path, stub):
+    p, argv = _run(tmp_path, stub, path="src", fail_on="high", min_confidence="low", fail_on_parse_error="true")
+    assert argv[-1] == "--fail-on-parse-error"
+    assert argv[:2] == ["scan", "src"]
+
+
+@needs_bash
+@pytest.mark.parametrize("val", ["", "false"])
+def test_fail_on_parse_error_off_by_default(tmp_path, stub, val):
+    p, argv = _run(tmp_path, stub, path="src", fail_on="", min_confidence="low", fail_on_parse_error=val)
+    assert "--fail-on-parse-error" not in argv
+
+
+@needs_bash
+@pytest.mark.parametrize("evil", ["TRUE", "yes", "true; touch pwned", "$(touch pwned)"])
+def test_fail_on_parse_error_is_allow_listed(tmp_path, stub, evil):
+    p, argv = _run(tmp_path, stub, path=".", fail_on="", min_confidence="low", fail_on_parse_error=evil)
+    assert p.returncode == 2 and "::error::" in p.stdout and argv is None
+    assert not (tmp_path / "pwned").exists()
+
+
+@pytest.fixture
+def real_cli(tmp_path):
+    """A `sinkline` on PATH that runs the checked-out package, so the script sees real exit codes."""
+    bindir = tmp_path / "realbin"
+    bindir.mkdir()
+    exe = bindir / "sinkline"
+    with open(exe, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write('#!/usr/bin/env bash\nexec "$SL_PY" -m sinkline "$@"\n')
+    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
+    return bindir
+
+
+def _run_real(tmp_path, real_cli, **inputs):
+    env = dict(os.environ)
+    env["PATH"] = str(real_cli) + os.pathsep + env["PATH"]
+    env["SL_PY"] = sys.executable.replace("\\", "/")
+    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    env["GITHUB_ENV"] = str(tmp_path / "ghenv.txt")
+    for k, v in inputs.items():
+        env["INPUT_" + k.upper()] = v
+    p = subprocess.run([BASH, str(SCRIPT)], cwd=tmp_path, env=env, capture_output=True, text=True)
+    gh = tmp_path / "ghenv.txt"
+    rc = gh.read_text(encoding="utf-8").strip() if gh.exists() else None
+    return p, rc
+
+
+@needs_bash
+def test_real_missing_path_records_rc_2(tmp_path, real_cli):
+    p, rc = _run_real(tmp_path, real_cli, path="nonexistent", fail_on="high", min_confidence="low")
+    assert p.returncode == 0 and rc == "SINKLINE_RC=2"
+
+
+@needs_bash
+def test_real_only_unparseable_file_records_rc_3_under_fail_on(tmp_path, real_cli):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "bad.py").write_text("def f(:\n")
+    p, rc = _run_real(tmp_path, real_cli, path="src", fail_on="low", min_confidence="low")
+    assert rc == "SINKLINE_RC=3"
+
+
+@needs_bash
+def test_real_parse_error_flag_gates_only_when_set(tmp_path, real_cli):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "ok.py").write_text("x = 1\n")
+    (tmp_path / "src" / "bad.py").write_text("def f(:\n")
+    _, rc = _run_real(tmp_path, real_cli, path="src", fail_on="high", min_confidence="low")
+    assert rc is None
+    _, rc = _run_real(tmp_path, real_cli, path="src", fail_on="high", min_confidence="low", fail_on_parse_error="true")
+    assert rc == "SINKLINE_RC=3"
+
+
+def test_action_yml_declares_the_input_and_names_each_exit_code():
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    assert "fail-on-parse-error:" in text and "${{ inputs.fail-on-parse-error }}" in text
+    assert '"2"' in text and '"3"' in text
+    assert "hashFiles('sinkline.sarif')" in text  # a failed scan must not turn into an upload error

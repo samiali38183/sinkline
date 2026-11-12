@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Run by action.yml. Inputs arrive as environment variables (INPUT_PATH, INPUT_FAIL_ON,
-# INPUT_MIN_CONFIDENCE), never interpolated into this script's text, and are only ever used
+# INPUT_MIN_CONFIDENCE, INPUT_FAIL_ON_PARSE_ERROR), never interpolated into this script's text, and are only ever used
 # quoted, as single argv entries. See "Using the GitHub Action safely" in the README.
 set -u
 
 fail_on="${INPUT_FAIL_ON:-}"
 min_conf="${INPUT_MIN_CONFIDENCE:-low}"
 path="${INPUT_PATH:-.}"
+fail_parse="${INPUT_FAIL_ON_PARSE_ERROR:-false}"
 
 case "$fail_on" in
   ""|low|medium|high|critical) ;;
@@ -15,6 +16,10 @@ esac
 case "$min_conf" in
   low|medium|high) ;;
   *) echo "::error::min-confidence must be low, medium or high"; exit 2 ;;
+esac
+case "$fail_parse" in
+  true|false) ;;
+  *) echo "::error::fail-on-parse-error must be true or false"; exit 2 ;;
 esac
 # a path that starts with "-" would be parsed as an option
 case "$path" in
@@ -26,6 +31,11 @@ if [ -n "$fail_on" ]; then
   args+=(--fail-on "$fail_on")
 fi
 
+if [ "$fail_parse" = "true" ]; then
+  args+=(--fail-on-parse-error)
+fi
+
+# sinkline exit codes: 0 ok, 1 findings at/above fail-on, 2 error (bad path), 3 scan incomplete
 rc=0
 sinkline "${args[@]}" || rc=$?
 if [ "$rc" -ne 0 ]; then
