@@ -25,6 +25,7 @@ def to_json(res: ScanResult, version: str) -> str:
             "version": version,
             "generated": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
             "files": res.files,
+            "files_failed": len(res.error_files),
             "functions": res.functions,
             "errors": res.errors,
             "by_owasp": res.by_owasp(),
@@ -37,6 +38,20 @@ def to_json(res: ScanResult, version: str) -> str:
 # ---------------------------------------------------------------------------
 # SARIF 2.1.0  (GitHub code scanning compatible)
 # ---------------------------------------------------------------------------
+
+def _notifications(res: ScanResult) -> List[dict]:
+    """Files that were not analyzed (and an empty scan) as SARIF tool notifications, so a consumer of
+    the SARIF file can tell "no results" from "nothing was scanned"."""
+    notes: List[dict] = []
+    for i, msg in enumerate(res.errors):
+        n: dict = {"level": "error", "descriptor": {"id": "SL-NOTIFY-PARSE"}, "message": {"text": msg}}
+        if len(res.error_files) == len(res.errors):
+            n["locations"] = [{"physicalLocation": {"artifactLocation": {"uri": res.error_files[i], "uriBaseId": "%SRCROOT%"}}}]
+        notes.append(n)
+    if res.files == 0:
+        notes.append({"level": "warning", "descriptor": {"id": "SL-NOTIFY-NOFILES"}, "message": {"text": "no Python files were analyzed"}})
+    return notes
+
 
 def to_sarif(res: ScanResult, version: str) -> str:
     rules: Dict[str, dict] = {}
@@ -104,10 +119,16 @@ def to_sarif(res: ScanResult, version: str) -> str:
                         "informationUri": "https://github.com/samiali38183/sinkline",
                         "semanticVersion": version,
                         "rules": list(rules.values()),
+                        "notifications": [
+                            {"id": "SL-NOTIFY-PARSE", "name": "FileNotAnalyzed",
+                             "shortDescription": {"text": "A file could not be read or parsed and was not analyzed."}},
+                            {"id": "SL-NOTIFY-NOFILES", "name": "NoFilesAnalyzed",
+                             "shortDescription": {"text": "The scan analyzed no Python files."}},
+                        ],
                     }
                 },
                 "results": results,
-                "invocations": [{"executionSuccessful": True, "toolExecutionNotifications": [{"level": "error", "message": {"text": e}} for e in res.errors]}],
+                "invocations": [{"executionSuccessful": True, "toolExecutionNotifications": _notifications(res)}],
             }
         ],
     }

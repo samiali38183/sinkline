@@ -1,9 +1,18 @@
 """sinkline command-line interface.
 
     sinkline scan PATH [--format text|json|sarif|html] [-o FILE] [--fail-on SEVERITY]
-                       [--baseline FILE] [--min-confidence low|medium|high] [--exclude-tests]
+                       [--fail-on-parse-error] [--baseline FILE] [--min-confidence low|medium|high]
+                       [--exclude-tests]
     sinkline rules      # list rules with OWASP/CWE mapping
     sinkline explain RULE_ID
+
+Exit codes of `scan`:
+    0  scanned; no finding at or above --fail-on (or --fail-on not given)
+    1  at least one finding at or above --fail-on
+    2  error: path not found or unreadable, unreadable baseline, unwritable output
+    3  scan incomplete: a file could not be parsed and --fail-on-parse-error was given, or no Python
+       file was analyzed and --fail-on was given
+If several apply, 2 wins over 1, and 1 over 3.
 """
 
 from __future__ import annotations
@@ -13,19 +22,32 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 from . import __version__
 from .engine import scan_path
 from .model import CWE_TO_NAME, OWASP_NAMES, SINKS, Sink
 from .report import to_html, to_json, to_sarif, to_text
 
+EXIT_OK, EXIT_FINDINGS, EXIT_ERROR, EXIT_INCOMPLETE = 0, 1, 2, 3
 _SEV = ["low", "medium", "high", "critical"]
 _CONF = ["low", "medium", "high"]
 
 
+def _names(files: List[str], limit: int = 10) -> str:
+    shown = ", ".join(files[:limit])
+    return shown + (f", ... (+{len(files) - limit} more)" if len(files) > limit else "")
+
+
 def _cmd_scan(a: argparse.Namespace) -> int:
-    res = scan_path(a.path, exclude_tests=a.exclude_tests)
+    try:
+        res = scan_path(a.path, exclude_tests=a.exclude_tests)
+    except FileNotFoundError:
+        print(f"sinkline: error: path not found: {a.path}", file=sys.stderr)
+        return EXIT_ERROR
+    except OSError as e:
+        print(f"sinkline: error: cannot read {a.path}: {e.strerror or e}", file=sys.stderr)
+        return EXIT_ERROR
     minc = _CONF.index(a.min_confidence)
     res.findings = [f for f in res.findings if _CONF.index(f.confidence) >= minc]
     if a.rule:
@@ -39,7 +61,7 @@ def _cmd_scan(a: argparse.Namespace) -> int:
             res.findings = [f for f in res.findings if f.fingerprint not in known]
         except (OSError, ValueError) as e:
             print(f"sinkline: cannot read baseline: {e}", file=sys.stderr)
-            return 2
+            return EXIT_ERROR
 
     fmt = a.format
     if fmt == "json":
@@ -53,7 +75,11 @@ def _cmd_scan(a: argparse.Namespace) -> int:
         out = to_text(res, color=color)
 
     if a.output:
-        Path(a.output).write_text(out, encoding="utf-8")
+        try:
+            Path(a.output).write_text(out, encoding="utf-8")
+        except OSError as e:
+            print(f"sinkline: error: cannot write {a.output}: {e.strerror or e}", file=sys.stderr)
+            return EXIT_ERROR
         print(f"sinkline: wrote {a.output} ({len(res.findings)} findings)", file=sys.stderr)
     else:
         try:
@@ -61,11 +87,24 @@ def _cmd_scan(a: argparse.Namespace) -> int:
         except UnicodeEncodeError:
             sys.stdout.buffer.write((out + "\n").encode("utf-8", errors="replace"))
 
+    failed = res.error_files
+    if failed:
+        print(f"sinkline: warning: {len(failed)} file(s) could not be parsed and were not analyzed: {_names(failed)}", file=sys.stderr)
+    if res.files == 0:
+        print(f"sinkline: warning: no Python files were analyzed under {a.path}"
+              + (" (every file failed to parse)" if failed else ""), file=sys.stderr)
+
     if a.fail_on:
         thr = _SEV.index(a.fail_on)
         if any(_SEV.index(f.severity) >= thr for f in res.findings):
-            return 1
-    return 0
+            return EXIT_FINDINGS
+    if failed and a.fail_on_parse_error:
+        print("sinkline: error: failing because of --fail-on-parse-error", file=sys.stderr)
+        return EXIT_INCOMPLETE
+    if res.files == 0 and a.fail_on:
+        print("sinkline: error: nothing was analyzed, so --fail-on cannot pass", file=sys.stderr)
+        return EXIT_INCOMPLETE
+    return EXIT_OK
 
 
 def _cmd_rules(a: argparse.Namespace) -> int:
@@ -111,7 +150,8 @@ def main(argv=None) -> int:
     s.add_argument("path")
     s.add_argument("--format", "-f", choices=["text", "json", "sarif", "html"], default="text")
     s.add_argument("--output", "-o")
-    s.add_argument("--fail-on", choices=_SEV, help="exit 1 if any finding at or above this severity")
+    s.add_argument("--fail-on", choices=_SEV, help="exit 1 if any finding at or above this severity; exit 3 if no file was analyzed")
+    s.add_argument("--fail-on-parse-error", action="store_true", help="exit 3 if any file could not be read or parsed")
     s.add_argument("--baseline", help="JSON report; suppress findings whose fingerprint is already in it")
     s.add_argument("--min-confidence", choices=_CONF, default="low")
     s.add_argument("--rule", action="append", help="only these rule ids / OWASP categories / CWEs (repeatable)")
