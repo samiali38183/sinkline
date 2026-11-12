@@ -199,6 +199,9 @@ class FileAnalyzer(ast.NodeVisitor):
         self.guards: Dict[str, FrozenSet[str]] = {}  # name -> cwes cleared by validation guard in this block
         # "module.Class.attr" -> taint stored into self.attr by any method of that class (shared across files and passes)
         self.fields: Dict[str, Taint] = fields if fields is not None else {}
+        # names currently bound to a lambda (`f = lambda c: ...`); a call `f(x)` analyzes the body with `x` bound
+        self.lambdas: Dict[str, ast.Lambda] = {}
+        self._lambda_depth = 0
 
     # -- helpers -------------------------------------------------------------
     def _register_alias(self, alias: str, summ: "Summary") -> None:
@@ -317,6 +320,8 @@ class FileAnalyzer(ast.NodeVisitor):
     def _function(self, node) -> None:
         key = self._fn_key(node)
         saved = (self.env, self.scope, self.current_fn, self.current_summary, self.param_index, self.in_http_view, self.guards)
+        saved_lambdas = self.lambdas
+        self.lambdas = {k: v for k, v in saved_lambdas.items() if k not in ([a.arg for a in node.args.posonlyargs + node.args.args + node.args.kwonlyargs])}
         # a nested def sees the enclosing function's taint (pass 2 only: in pass 1 the outer env
         # holds `param:N` labels of the OUTER function, which would corrupt the inner summary)
         args = node.args
@@ -379,6 +384,7 @@ class FileAnalyzer(ast.NodeVisitor):
             self.visit(stmt)
 
         (self.env, self.scope, self.current_fn, self.current_summary, self.param_index, self.in_http_view, self.guards) = saved
+        self.lambdas = saved_lambdas
 
     @staticmethod
     def _annotation_of(fn, name: str) -> Optional[str]:
@@ -482,6 +488,8 @@ class FileAnalyzer(ast.NodeVisitor):
                     self.scope.bind(tgt.id, "pathlib.Path")
         for tgt in node.targets:
             self._assign_target(tgt, t, node)
+        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Lambda):
+            self.lambdas[node.targets[0].id] = node.value
         if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and not t and t.keys is None:
             cv = self._const_eval(node.value)
             if cv is not _UNK and not self.loop_depth:
@@ -508,6 +516,7 @@ class FileAnalyzer(ast.NodeVisitor):
                 t = t.step(self.fs(node, "propagate", f"assigned to `{tgt.id}`"))
             self.env[tgt.id] = t
             self.guards.pop(tgt.id, None)
+            self.lambdas.pop(tgt.id, None)
         elif isinstance(tgt, (ast.Tuple, ast.List)):
             for e in tgt.elts:
                 self._assign_target(e, t, node)
@@ -1259,6 +1268,11 @@ class FileAnalyzer(ast.NodeVisitor):
             any_arg = any_arg.union(a)
         any_arg = any_arg.plain()
 
+        # 0. a lambda bound to a name, or called in place: analyze its body with the arguments bound
+        lam = node.func if isinstance(node.func, ast.Lambda) else (self.lambdas.get(node.func.id) if isinstance(node.func, ast.Name) else None)
+        if lam is not None:
+            return self._call_lambda(lam, node, arg_taints, kw_taints)
+
         # 1. sanitizer?
         san = self.lookup_sanitizer(func_q)
         if san is not None:
@@ -1353,12 +1367,62 @@ class FileAnalyzer(ast.NodeVisitor):
                 return any_arg.sanitize(summ.sanitizes, self.fs(node, "sanitizer", f"{summ.name}() (user sanitizer)"))
             return out
 
+        # 7b. calling a source attribute: request.get_json(), request.get_data(), reader.read()
+        if isinstance(node.func, ast.Attribute):
+            st = self._source_taint(func_q, node.func)
+            if st:
+                return st.union(any_arg) if any_arg else st
+
         # 8. unknown function: conservatively propagate (may-analysis), but mark lower confidence
         if any_arg and not self.collect:
             return Taint(any_arg.labels | {"~unknown-call"}, any_arg.cleared, any_arg.trail).step(self.fs(node, "call", f"{func_q or '?'}() (unknown; assumed passthrough)"))
         if any_arg and self.collect:
             return any_arg
         return recv_t if recv_t else EMPTY
+
+    def _call_lambda(self, lam: ast.Lambda, node: ast.Call, arg_taints: List[Taint], kw_taints: Dict[Optional[str], Taint]) -> Taint:
+        """Analyze a lambda body at one call site with the parameters bound to the argument taints.
+
+        Not a summary: the body is re-evaluated per call, and what it closes over is the caller's
+        environment at the call (not at the definition). Depth-limited so a lambda that calls itself
+        through its own name terminates."""
+        if self._lambda_depth >= 3:
+            return EMPTY
+        a = lam.args
+        positional = [x.arg for x in a.posonlyargs + a.args]
+        named = positional + [x.arg for x in a.kwonlyargs]
+        saved_env, saved_guards, saved_lambdas = self.env, self.guards, self.lambdas
+        env, guards = dict(self.env), dict(self.guards)
+        for n in named + [x.arg for x in (a.vararg, a.kwarg) if x]:
+            env.pop(n, None)
+            guards.pop(n, None)
+        bound = {n: EMPTY for n in named}
+        extra = EMPTY
+        for i, t in enumerate(arg_taints):
+            if i < len(positional):
+                bound[positional[i]] = t
+            else:
+                extra = extra.union(t)
+        for k, t in kw_taints.items():
+            if k in bound:
+                bound[k] = t
+            else:
+                extra = extra.union(t)  # **kwargs spread, or a keyword collected by **kw
+        for n, t in bound.items():
+            env[n] = t.step(self.fs(node, "call", f"argument `{n}` of lambda")) if t else EMPTY
+        for x in (a.vararg, a.kwarg):
+            if x:
+                env[x.arg] = extra
+        self.env, self.guards = env, guards
+        shadowed = set(named) | {x.arg for x in (a.vararg, a.kwarg) if x}
+        self.lambdas = {k: v for k, v in saved_lambdas.items() if k not in shadowed}
+        self._lambda_depth += 1
+        try:
+            out = self.eval(lam.body)
+        finally:
+            self._lambda_depth -= 1
+            self.env, self.guards, self.lambdas = saved_env, saved_guards, saved_lambdas
+        return out.step(self.fs(node, "call", "through lambda")) if out else EMPTY
 
     def _record_transitive_sinks(self, t: Taint, inner: List["InnerSink"]) -> None:
         """Pass 1: a parameter of the current function reaches a sink inside a callee.
@@ -1528,6 +1592,7 @@ class ScanResult:
     files: int
     functions: int
     errors: List[str]
+    error_files: List[str] = field(default_factory=list)  # files that could not be read or parsed (not in `files`)
 
     def by_owasp(self) -> Dict[str, int]:
         out: Dict[str, int] = {}
@@ -1570,18 +1635,32 @@ def _is_test_file(rel: Path) -> bool:
 
 
 def scan_path(path: str, exclude_tests: bool = False) -> ScanResult:
+    """Scan a file or a directory tree.
+
+    Raises FileNotFoundError when `path` does not exist and OSError when a single named file cannot be
+    read. A file inside a directory that cannot be read or parsed is recorded in `ScanResult.errors`
+    and `ScanResult.error_files` and the scan continues.
+    """
     root = Path(path)
+    if not root.exists():
+        raise FileNotFoundError(path)
     items = []
-    errors = []
+    errors: List[str] = []
+    error_files: List[str] = []
     for p in _iter_py(root):
         if exclude_tests and _is_test_file(p.relative_to(root) if root.is_dir() else Path(p.name)):
             continue
+        name = str(p.relative_to(root) if root.is_dir() else p.name).replace("\\", "/")
         try:
-            items.append((str(p.relative_to(root) if root.is_dir() else p.name).replace("\\", "/"), p.read_text(encoding="utf-8", errors="replace")))
-        except OSError as e:  # pragma: no cover
-            errors.append(f"{p}: {e}")
+            items.append((name, p.read_text(encoding="utf-8", errors="replace")))
+        except OSError as e:
+            if root.is_file():
+                raise
+            errors.append(f"{name}: cannot read file ({e.strerror or e})")
+            error_files.append(name)
     res = _scan(items)
     res.errors = errors + res.errors
+    res.error_files = error_files + res.error_files
     return res
 
 
@@ -1600,11 +1679,17 @@ def _summary_state(summaries: Dict[str, Summary], fields: Dict[str, Taint]) -> L
 def _scan(items: List[Tuple[str, str]]) -> ScanResult:
     trees: List[Tuple[str, str, ast.Module]] = []
     errors: List[str] = []
+    error_files: List[str] = []
     for name, src in items:
         try:
             trees.append((name, src, ast.parse(src, filename=name)))
         except SyntaxError as e:
-            errors.append(f"{name}: {e.msg} (line {e.lineno})")
+            errors.append(f"{name}: {e.msg} (line {e.lineno})" if e.lineno else f"{name}: {e.msg}")
+            error_files.append(name)
+        except (ValueError, RecursionError, MemoryError) as e:
+            # null bytes raise ValueError before Python 3.12; absurdly nested source raises RecursionError
+            errors.append(f"{name}: {str(e) or type(e).__name__}")
+            error_files.append(name)
 
     summaries: Dict[str, Summary] = {}
     fields: Dict[str, Taint] = {}
@@ -1629,4 +1714,4 @@ def _scan(items: List[Tuple[str, str]]) -> ScanResult:
 
     sev_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     findings.sort(key=lambda f: (sev_rank.get(f.severity, 9), f.file, f.line))
-    return ScanResult(findings=findings, files=len(trees), functions=nfunc, errors=errors)
+    return ScanResult(findings=findings, files=len(trees), functions=nfunc, errors=errors, error_files=error_files)

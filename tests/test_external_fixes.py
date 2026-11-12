@@ -497,3 +497,128 @@ def test_quote_rejection_guards_xpath_only():
         return ""
     """)
     assert list(r.values()) == [{"CWE-78"}]
+
+
+# ---- lambdas, and match on a call-result subject (review 2026-11-11) ---------------------
+
+def test_lambda_bound_to_a_name_reaches_its_sink():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        f = lambda c: subprocess.run(c, shell=True)
+        f(request.args["c"])
+    """)
+    assert r == {8: {"CWE-78"}}
+
+
+def test_lambda_called_inline():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        (lambda c: os.system(c))(request.args["c"])
+    """)
+    assert r == {8: {"CWE-78"}}
+
+
+def test_lambda_return_value_carries_taint():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        wrap = lambda s: "echo " + s
+        os.system(wrap(request.args["c"]))
+    """)
+    assert r == {9: {"CWE-78"}}
+
+
+def test_lambda_with_clean_argument_is_not_reported():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        f = lambda c: os.system(c)
+        f("ls")
+        x = request.args["x"]
+    """)
+    assert r == {}
+
+
+def test_lambda_sanitizing_body_is_respected():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        f = lambda c: os.system(shlex.quote(c))
+        f(request.args["c"])
+    """)
+    assert r == {}
+
+
+def test_lambda_parameter_flows_from_the_enclosing_function_parameter():
+    r = cwes_by_line(FLASK + """
+    def run_it(arg):
+        go = lambda a: os.system(a)
+        go(arg)
+
+    @app.route('/')
+    def v():
+        run_it(request.args["c"])
+    """)
+    assert r  # the flow through run_it's parameter into the lambda must not be lost
+
+
+def test_reassigned_lambda_name_is_forgotten():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        f = lambda c: os.system(c)
+        f = print
+        f(request.args["c"])
+    """)
+    assert r == {}
+
+
+@needs_match
+def test_review_match_case_as_pattern():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        match request.args.get("a"):
+            case str() as s:
+                os.system(s)
+    """)
+    assert r == {10: {"CWE-78"}}
+
+
+@needs_match
+def test_match_on_get_json_call_result():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        match request.get_json():
+            case {"cmd": c}:
+                os.system(c)
+    """)
+    assert r == {10: {"CWE-78"}}
+
+
+def test_source_method_call_result_is_tainted():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        body = request.get_data()
+        os.system(body)
+        data = request.get_json()
+        os.system(data["cmd"])
+    """)
+    assert r == {9: {"CWE-78"}, 11: {"CWE-78"}}
+
+
+def test_lambda_calling_another_lambda_and_self_recursion_terminates():
+    r = cwes_by_line(FLASK + """
+    @app.route('/')
+    def v():
+        inner = lambda c: os.system(c)
+        outer = lambda c: inner(c)
+        outer(request.args["c"])
+        loop = lambda c: loop(c)
+        loop(request.args["x"])
+    """)
+    assert r == {8: {"CWE-78"}}
