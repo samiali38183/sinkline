@@ -1,4 +1,4 @@
-"""Score bandit (pattern-based) on the same labeled corpus, for an honest side-by-side.
+"""Score bandit (pattern-based) on the same labeled corpus, for a side-by-side.
 
 Lenient scoring: ANY bandit issue on a VULN line counts as a true positive, regardless of CWE.
 Usage: python bench/compare_bandit.py   (requires `pip install bandit`)

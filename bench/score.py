@@ -4,7 +4,7 @@ Ground truth comes from inline tags:
     # VULN:CWE-89     this line must produce a finding with that CWE
     # SAFE            this line must produce NO finding
 Lines marked "-- known FN class" / "-- known FP class" are counted separately so the
-honest headline numbers include them but the breakdown shows what's a design limit.
+headline numbers include them, and the breakdown shows which misses are design limits.
 
 Usage:  python bench/score.py [--json out.json] [--verbose]
 """

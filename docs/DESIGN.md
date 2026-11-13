@@ -3,13 +3,13 @@
 ## Why taint analysis, and why from scratch
 
 Pattern-matching linters (bandit, semgrep without taint mode) answer "is there a dangerous call here?".
-That produces one finding per `cursor.execute` regardless of whether the argument came from a config
-file or from `request.args`. Taint analysis answers the question a security reviewer actually asks:
-**can attacker-controlled bytes reach this sink without passing through a sanitizer?**
+That gives one finding per `cursor.execute` whether the argument came from a config file or from
+`request.args`. Taint analysis asks the question I care about when reading code: can attacker-controlled
+bytes reach this sink without passing through a sanitizer?
 
-sinkline is written against the Python `ast` module only. No tree-sitter, no Semgrep, no CodeQL
-database. The point is to own every decision in the pipeline: how taint is represented, how it moves
-through expressions, how branches merge, how calls are summarized, and when a sanitizer counts.
+sinkline uses only the Python `ast` module. There is no tree-sitter, Semgrep or CodeQL database. I wanted to
+make every decision in the pipeline myself: how taint is represented, how it moves through expressions, how
+branches merge, how calls are summarized, and when a sanitizer counts.
 
 ## The abstract domain
 
@@ -25,10 +25,9 @@ trail    : tuple[FlowStep]  # provenance, for the report
 (a value that is sanitized on one path and not on the other is not sanitized), and trail concatenation.
 A sink with CWE `c` fires when `labels` is non-empty and `c ∉ cleared` and `"*" ∉ cleared`.
 
-Sanitizers are deliberately CWE-scoped: `shlex.quote` clears CWE-78 and nothing else. `html.escape`
+Sanitizers are scoped to a CWE on purpose. `shlex.quote` clears CWE-78 and nothing else, and `html.escape`
 clears CWE-79 and nothing else. `int()` clears everything, because its output can only be a number.
-Treating sanitization as a global boolean is the most common source of false negatives in homegrown
-taint tools; a value that is shell-safe is not SQL-safe.
+A single global "sanitized" flag would make a shell-safe value look SQL-safe, which is a false negative.
 
 ## Intraprocedural analysis
 
@@ -51,7 +50,7 @@ The core is a flow-sensitive abstract interpreter over function bodies (`FileAna
 
 ## Validation guards
 
-Not every sanitizer is a function call. Real code validates with conditions:
+Not every sanitizer is a function call. Real code often validates with a condition instead:
 
 ```python
 if not uid.isdigit(): abort(400)          # uid is numeric below this line
@@ -61,8 +60,8 @@ if not re.fullmatch(r"[a-z]+", h): abort()
 if urlparse(nxt).netloc != "": abort()    # same-origin redirect
 ```
 
-`_guards_from_test` turns a test expression into two maps - guards that hold when the test is true and
-when it is false - then `visit_If` applies the right map to each branch. Guards are also CWE-scoped:
+`_guards_from_test` turns a test expression into two maps, the guards that hold when the test is true and
+the guards that hold when it is false. Then `visit_If` applies the right map to each branch. Guards are scoped to a CWE too:
 `".." in f` is a path guard, not a shell guard. Boolean combinations follow De Morgan: `(A or B)` being
 false means both `A` and `B` are false, so the false-branch guard is the **union** of the parts;
 `(A and B)` being true means both are true, so the true-branch guard is the union; the other
@@ -84,7 +83,7 @@ from an early-return guard.
 
 Two passes over the whole project:
 
-**Pass 1 - summaries.** Every function and method is analyzed with each parameter bound to the synthetic
+**Pass 1, summaries.** Every function and method is analyzed with each parameter bound to the synthetic
 label `param:i`. The result is a `Summary`:
 
 ```
@@ -107,14 +106,13 @@ This is flow-insensitive across methods (it does not know whether `load()` runs 
 these findings are reported at medium confidence. Parameter taint stored on `self` is not recorded
 (it depends on the caller and is already covered by summaries), and inheritance is not followed.
 
-**Pass 2 - report.** Function bodies are analyzed again with real sources (`request.args`, route
+**Pass 2, report.** Function bodies are analyzed again with real sources (`request.args`, route
 parameters, `sys.argv`). At each call site the summary is consulted: tainted arguments flow to the
 return value (`returns_from`), reach sinks inside the callee (`sinks_from`, reported at the call site
 with a flow step pointing into the callee's file), or get cleared (`sanitizes`).
 
-Summaries are context-insensitive (one summary per function, not per call site). This is the standard
-trade-off: it keeps the analysis linear in program size and in practice loses very little precision
-on web handler code, which is shallow.
+Summaries are context-insensitive (one summary per function, not per call site). That keeps the analysis
+roughly linear in program size. I have not measured how much precision it costs on web handler code.
 
 ### Name resolution across files
 
@@ -167,12 +165,12 @@ score keeps it visible instead of hiding it.
 
 ## Output
 
-* **text** - one block per finding with the full source→sink flow.
-* **json** - machine-readable with stable fingerprints (rule + file + function + normalized sink text;
+* **text**: one block per finding with the full source-to-sink flow.
+* **json**: machine-readable with stable fingerprints (rule + file + function + normalized sink text;
   deliberately excludes line numbers so a baseline survives unrelated edits).
-* **sarif** - SARIF 2.1.0 with `codeFlows`/`threadFlows`, so GitHub code scanning renders the path
+* **sarif**: SARIF 2.1.0 with `codeFlows`/`threadFlows`, so GitHub code scanning renders the path
   step-by-step in the PR.
-* **html** - self-contained single file for sharing.
+* **html**: self-contained single file for sharing.
 
 Files that cannot be parsed (and a scan that analyzes no file) are part of the output, not silent: they appear on
 stderr, in the JSON `errors` / `files_failed` fields and as SARIF `toolExecutionNotifications`. Exit codes are

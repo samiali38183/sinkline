@@ -2,28 +2,28 @@
 
 Design notes:
 
-* **Abstract domain.** Each variable maps to a `Taint` - a set of labels (where the data came
-  from) plus the provenance chain (file/line hops) that got it there. Absence = untainted.
-* **Flow-sensitive, intraprocedural core.** We walk each function body in order, with a
-  simple fixpoint over loops (iterate until the environment stops changing, max N rounds).
-  Branches merge by union (may-analysis: we care about *any* path reaching a sink).
-* **Interprocedural via summaries.** Pass 1 computes, for every function, which parameter
+* Abstract domain. Each variable maps to a `Taint`: a set of labels (where the data came
+  from) plus the provenance chain (file and line hops) that got it there. No entry means untainted.
+* Flow-sensitive within a function. Each function body is walked in order, with a
+  fixpoint over loops (iterate until the environment stops changing, at most N rounds).
+  Branches merge by union (may-analysis: any path that reaches a sink counts).
+* Interprocedural through summaries. Pass 1 computes, for every function, which parameter
   indexes flow to its return value (a *summary*). Pass 2 uses summaries at call sites so
   `clean = normalize(user)` stays tainted if `normalize` returns its argument. Pass 1 also
   records which parameters reach a sink *inside* the callee, so tainted arguments to
   `run_query(sql)` are reported at the call site with the full interprocedural path.
-* **Sanitizers are CWE-scoped.** `shlex.quote` clears command-injection taint but not
+* Sanitizers are scoped to a CWE. `shlex.quote` clears command-injection taint but not
   path-traversal taint. Coercions like `int()` clear everything.
-* **Validation guards.** `if not x.isdigit(): abort()` / `if x in ALLOWED:` / `if re.fullmatch`
-  are recognized; inside the guarded branch (or after an early return) the name is treated as
-  sanitized. This is the single biggest false-positive killer on real code.
-* **Field sensitivity.** `request.args` is tainted; `request.method` is not. Dict/attr access on
+* Validation guards. `if not x.isdigit(): abort()`, `if x in ALLOWED:` and `if re.fullmatch` are
+  recognized. Inside the guarded branch (or after an early return) the name is treated as sanitized.
+  Without this, validated input would be reported constantly.
+* Field sensitivity. `request.args` is tainted; `request.method` is not. Dict/attr access on
   a tainted value stays tainted. A dict literal with constant string keys keeps per-key taint
   (`{"id": 1, "note": t}["id"]` is clean); anything else falls back to the whole container.
-* **Sink gates.** `subprocess.run(cmd, shell=True)` fires; `shell=False` doesn't.
+* Sink gates. `subprocess.run(cmd, shell=True)` fires; `shell=False` doesn't.
   `yaml.load(x)` fires unless `Loader=SafeLoader`. `torch.load(p)` fires unless weights_only=True.
 
-* **Instance fields across methods.** Pass 1 records, per class, which `self.<attr>` fields are
+* Instance fields across methods. Pass 1 records, per class, which `self.<attr>` fields are
   assigned request data in any method. A method that reads such a field without assigning it
   first sees that taint (flow-insensitive across methods, reported at medium confidence).
 

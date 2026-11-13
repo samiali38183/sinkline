@@ -8,11 +8,11 @@
   Benchmarks are unchanged (corpus TP 60, FP 0, FN 1, TN 48; BenchmarkPython 10 taint categories 0.73 / 0.21).
 - SARIF: `invocations[0].executionSuccessful` is false when a file could not be parsed (it was always true, even next
   to an error-level `SL-NOTIFY-PARSE` notification).
-- Tests 184 to 186.
+- Tests 184 to 186 (186 on main, 184 at the v0.5.1 tag).
 
 ## 0.5.1 (2026-11-11)
 
-Fixes from an outside review of 0.5.0. Benchmarks are unchanged: corpus TP 60, FP 0, FN 1, TN 48 (P 1.000 /
+Fixes for problems found in 0.5.0 after it shipped. Benchmarks are unchanged: corpus TP 60, FP 0, FN 1, TN 48 (P 1.000 /
 R 0.984 / F1 0.992); OWASP BenchmarkPython 10 taint categories TPR 0.73 / FPR 0.21 (per-test table identical to
 0.5.0). Tests 138 to 184.
 
@@ -39,7 +39,7 @@ Analysis
 - Calling a source attribute (`request.get_json()`, `request.get_data()`, `await request.post()`) now returns tainted
   data. 0.5.0 lost the taint when the result was assigned or used in a `match` subject
   (`match request.get_json(): case {"cmd": c}: os.system(c)` produced no finding); `request.get_json()["k"]`
-  written inline was already found. The `match` shape in the review (`match request.args.get("a"): case str() as s`)
+  written inline was already found. The shape `match request.args.get("a"): case str() as s`
   was already handled in 0.5.0 and is now pinned by a test.
 - Summaries are now registered in a first round before names are resolved. In 0.5.0 a call in `good/libapi.py` to
   `libuser.login` could resolve to a same-named function in a sibling package (`bad/libuser.py`) when the file
@@ -128,7 +128,7 @@ Fixes
   `<` would miss `return request.args["q"]`, which Flask serves as HTML.
 
 Docs
-- README: first-person wording replaced with neutral wording about who labeled the corpus.
+- README: reworded the lines about who labeled the corpus.
 
 Tests
 - Two mutants survived the suite and are now killed: a loop iteration cap of 1 (a value that moves
@@ -170,6 +170,6 @@ Tooling
 
 ## 0.3.0
 
-Initial version on GitHub: two-pass interprocedural taint analysis, 42 rules / 138 sink signatures,
-CWE-scoped sanitizers, validation guards, text/JSON/SARIF/HTML output, GitHub Action, labeled
-benchmark and bandit comparison.
+First version on GitHub: two-pass interprocedural taint analysis, 42 rules and 138 sink signatures,
+CWE-scoped sanitizers, validation guards, text, JSON, SARIF and HTML output, a GitHub Action, a labeled
+benchmark and a bandit comparison.
