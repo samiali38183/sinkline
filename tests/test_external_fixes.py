@@ -50,6 +50,19 @@ def test_returned_call_result_is_xss(ret):
     assert r == {11: {"CWE-79"}}
 
 
+@pytest.mark.parametrize("ret", ["shlex.quote(name)", "os.path.basename(name)"])
+def test_returned_sanitizer_result_is_xss_unless_it_clears_cwe79(ret):
+    # shlex.quote clears command injection, basename clears path traversal; neither escapes HTML.
+    r = cwes_by_line(FLASK + f"""
+    import shlex, os.path
+    @app.route('/')
+    def v():
+        name = request.args["q"]
+        return {ret}
+    """)
+    assert r == {10: {"CWE-79"}}
+
+
 @pytest.mark.parametrize("ret", [
     "jsonify(name)", "redirect(name)", "render(name)", "url_for('v', q=name)", "json.dumps(name)",
     "name.isdigit()", "int(name)", "escape(name)", "name.strip().isdigit()",

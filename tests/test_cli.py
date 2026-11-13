@@ -109,6 +109,7 @@ def test_parse_failures_listed_in_json(tree):
 def test_parse_failures_listed_in_sarif_notifications(tree):
     inv = json.loads(run("scan", str(tree / "mixed"), "--format", "sarif").stdout)["runs"][0]["invocations"][0]
     notes = inv["toolExecutionNotifications"]
+    assert inv["executionSuccessful"] is False
     assert len(notes) == 1 and notes[0]["level"] == "error"
     assert notes[0]["descriptor"]["id"] == "SL-NOTIFY-PARSE"
     assert notes[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "bad.py"

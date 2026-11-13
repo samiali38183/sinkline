@@ -448,8 +448,12 @@ class FileAnalyzer(ast.NodeVisitor):
         q = self.qual(call.func) or ""
         if any(k in q for k in ("jsonify", "JSONResponse", "json", "redirect", "render", "send_", "Response", "make_response", "abort", "url_for", "TemplateResponse")):
             return False
-        if self.lookup_sink(q) or self.lookup_sanitizer(q) is not None:
+        if self.lookup_sink(q):
             return False
+        if self.lookup_sanitizer(q) is not None:
+            # A sanitizer is scoped to its own CWEs: `shlex.quote(x)` does not make x safe in HTML.
+            # `_returns_html` has already returned False when the value was cleared for CWE-79.
+            return True
         last = call.func.attr if isinstance(call.func, ast.Attribute) else q.split(".")[-1]
         if last in {"str", "format", "bytes"}:
             return True
