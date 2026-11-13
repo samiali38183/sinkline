@@ -1,4 +1,4 @@
-"""Labeled benchmark corpus — Flask.
+"""Labeled benchmark corpus - Flask.
 
 Every line that should fire is tagged `# VULN:<CWE>`; every line that must NOT fire is tagged
 `# SAFE`. bench/score.py reads these tags as ground truth and scores the analyzer.

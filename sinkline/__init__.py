@@ -1,4 +1,4 @@
-"""sinkline — interprocedural taint analysis for Python web apps, mapped to OWASP Top 10.
+"""sinkline - interprocedural taint analysis for Python web apps, mapped to OWASP Top 10.
 
 Public surface:
     from sinkline import scan_path, scan_source

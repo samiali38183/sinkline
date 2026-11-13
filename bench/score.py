@@ -88,7 +88,7 @@ def main():
                 tn += 1
                 rows.append(("TN", key, "-", []))
 
-    # findings on lines with no label at all are *unlabeled* — report but don't score
+    # findings on lines with no label at all are *unlabeled* - report but don't score
     unlabeled = [(k, sorted(v)) for k, v in hits.items() if k not in truth]
 
     prec = tp / (tp + fp) if tp + fp else 0.0
