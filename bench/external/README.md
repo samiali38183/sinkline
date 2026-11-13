@@ -1,19 +1,18 @@
 # External benchmark: OWASP BenchmarkPython v0.1
 
-The labeled corpus in `bench/corpus/` was written and labeled by the same person who wrote the
-engine, so its score says little about accuracy on code the engine has not seen. This directory
-scores sinkline, Bandit and Semgrep OSS on an independent suite: the
+I wrote and labeled the corpus in `bench/corpus/` myself, so its score says little about accuracy on
+code the engine has not seen. This directory scores sinkline, Bandit and Semgrep OSS on an independent suite, the
 [OWASP Benchmark for Python](https://github.com/OWASP-Benchmark/BenchmarkPython) (v0.1, "a preliminary
 initial release"), 1,230 small Flask test cases with an expected-results CSV.
 
-Nothing from that project is copied here (it is GPL-3.0); `run.sh` clones it into a scratch directory.
+None of that project is copied here (it is GPL-3.0). `run.sh` clones it into a scratch directory.
 
 ## What was run
 
 | item | value |
 |---|---|
 | benchmark | OWASP-Benchmark/BenchmarkPython, commit `f1291485808b66e20ddb6b01b10dc71b3df8c8ba` (2026-05-19), `expectedresults-0.1.csv` |
-| sinkline | 0.4.1 (`9a36ba2`) and 0.5.0 (this branch), `sinkline scan . --format json` from the benchmark checkout root (cross-file flows need the `helpers/` package in the scan) |
+| sinkline | 0.4.1 (`9a36ba2`) and 0.5.0, `sinkline scan . --format json` from the benchmark checkout root (cross-file flows need the `helpers/` package in the scan) |
 | Bandit | 1.9.4, `bandit -r . -f json` |
 | Semgrep OSS | 1.185.0, `semgrep scan --config p/python --config p/owasp-top-ten --json --metrics=off .` |
 | Python | 3.12.2, Windows 11 (Bandit and Semgrep installed in a separate virtualenv) |
@@ -26,8 +25,8 @@ directory; its files are not test cases and are ignored when scoring.
 
 ## Scoring
 
-`score.py` is **not** the official scorer. The official one is BenchmarkUtils (Java/Maven,
-`create-scorecard`), which was not run here. The definitions are the same:
+`score.py` is not the official scorer. The official one is BenchmarkUtils (Java/Maven,
+`create-scorecard`), which I did not run. The definitions are the same:
 
 - TPR = TP / (TP + FN) over the real vulnerabilities, FPR = FP / (FP + TN) over the safe cases,
   score = TPR - FPR.
@@ -38,11 +37,11 @@ directory; its files are not test cases and are ignored when scoring.
   per-category scores. Differences from the official scorecard (CWE matching, how categories are
   averaged) are possible.
 
-Categories: sinkline is a taint analyzer. Ten categories are source-to-sink flows and are in scope for it:
-sqli, cmdi, codeinj, xss, pathtraver, redirect, deserialization, ldapi, xpathi, xxe. Four are not:
+sinkline is a taint analyzer, and ten of the categories are source-to-sink flows that it should handle:
+sqli, cmdi, codeinj, xss, pathtraver, redirect, deserialization, ldapi, xpathi and xxe. The other four are
 hash (weak algorithm), weakrand (weak PRNG), securecookie (cookie flags) and trustbound (what is stored
-in the session). They are reported anyway (sinkline scores 0 on them), because the same suite scores
-Bandit on them.
+in the session). sinkline does not attempt them and scores 0, but I report them anyway because the same
+suite scores Bandit on them.
 
 ## Results (TPR / FPR / TPR-FPR)
 
@@ -74,20 +73,20 @@ Over all 14 categories: sinkline 0.5.0 175 / 277 / 93 / 685, Bandit 179 / 273 / 
 - On the taint categories sinkline finds far more than the pattern tools (TPR 0.73 against 0.13 and 0.07)
   at a higher false-positive rate (0.21 against 0.06 and 0.03). On pooled counts that is precision 0.65
   against 0.55 for both. Bandit and Semgrep have no rules for most of these categories, so their zeros mostly
-  mean "no rule", not "bad rule". Bandit's 1.00 / 1.00 on sqli and cmdi means it flags every file of that category.
+  mean "no rule", not "bad rule". Bandit's 1.00 / 1.00 on sqli and cmdi means it flags every file in that category.
 - Over all 14 categories Bandit scores higher (+0.36 against +0.27) because it covers `hash` and `weakrand`,
   which sinkline does not attempt.
-- sinkline's FPR is high. A large share of the remaining false positives are the suite's deliberately
-  obfuscated safe variants (see "Left open").
-- **The 0.5.0 numbers are not a held-out score.** The 0.4.1 to 0.5.0 changes were chosen by reading this
+- sinkline's FPR is high. I did not count how many of the remaining false positives come from the suite's
+  deliberately obfuscated safe variants, but "Left open" lists the causes I found.
+- The 0.5.0 numbers are not a held-out score. I chose the 0.4.1 to 0.5.0 changes by reading this
   benchmark's failures (sink coverage such as `codecs.open` and `elementpath.select`, branch pruning, `match`
   handling, helper-returned receiver types). Treat 0.4.1 as the independent measurement and 0.5.0 as
-  "what the fixes recover on the suite that motivated them". The benchmark is a single synthetic suite of
-  templated cases (many cases share one shape), v0.1, and small in the sqli, cmdi and xxe categories (5 to 13 real cases).
+  what the fixes recover on the suite that motivated them. The benchmark is one synthetic suite of
+  templated cases (many share one shape), it is v0.1, and it is small in the sqli, cmdi and xxe categories (5 to 13 real cases).
 
 ## Left open (0.5.0 does not handle)
 
-Counted from the 0.5.0 per-test results; each is a design limit, not a bug fix waiting to land.
+Taken from the 0.5.0 per-test results. Each one is a design limit, not a bug waiting for a fix.
 
 - Position-sensitive lists: `lst = []; lst.append("safe"); lst.append(param); lst.pop(0); bar = lst[1]`
   is safe, but a list is tracked as a whole container. This is the largest single source of false
@@ -99,4 +98,4 @@ Counted from the 0.5.0 per-test results; each is a design limit, not a bug fix w
 - XXE: parsing with a parser object configured elsewhere (`xml.sax.make_parser()`); sinkline reports the parse.
 - `os.path.exists()` style probes as path-traversal sinks (the suite counts them; sinkline does not).
 - Taint through module globals shared between requests (already a known limit in `docs/DESIGN.md`).
-- Run time: about 50 to 60 seconds for the 1,230-file tree on the machine used (Bandit a few seconds).
+- Run time was about 50 to 60 seconds for the 1,230-file tree on my machine (Bandit took a few seconds).
