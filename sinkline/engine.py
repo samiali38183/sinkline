@@ -1,8 +1,8 @@
 """The taint engine.
 
-Design (what an interviewer will ask about):
+Design notes:
 
-* **Abstract domain.** Each variable maps to a `Taint` — a set of labels (where the data came
+* **Abstract domain.** Each variable maps to a `Taint` - a set of labels (where the data came
   from) plus the provenance chain (file/line hops) that got it there. Absence = untainted.
 * **Flow-sensitive, intraprocedural core.** We walk each function body in order, with a
   simple fixpoint over loops (iterate until the environment stops changing, max N rounds).

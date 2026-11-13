@@ -61,8 +61,8 @@ if not re.fullmatch(r"[a-z]+", h): abort()
 if urlparse(nxt).netloc != "": abort()    # same-origin redirect
 ```
 
-`_guards_from_test` turns a test expression into two maps — guards that hold when the test is true and
-when it is false — then `visit_If` applies the right map to each branch. Guards are also CWE-scoped:
+`_guards_from_test` turns a test expression into two maps - guards that hold when the test is true and
+when it is false - then `visit_If` applies the right map to each branch. Guards are also CWE-scoped:
 `".." in f` is a path guard, not a shell guard. Boolean combinations follow De Morgan: `(A or B)` being
 false means both `A` and `B` are false, so the false-branch guard is the **union** of the parts;
 `(A and B)` being true means both are true, so the true-branch guard is the union; the other
@@ -84,7 +84,7 @@ from an early-return guard.
 
 Two passes over the whole project:
 
-**Pass 1 — summaries.** Every function and method is analyzed with each parameter bound to the synthetic
+**Pass 1 - summaries.** Every function and method is analyzed with each parameter bound to the synthetic
 label `param:i`. The result is a `Summary`:
 
 ```
@@ -107,7 +107,7 @@ This is flow-insensitive across methods (it does not know whether `load()` runs 
 these findings are reported at medium confidence. Parameter taint stored on `self` is not recorded
 (it depends on the caller and is already covered by summaries), and inheritance is not followed.
 
-**Pass 2 — report.** Function bodies are analyzed again with real sources (`request.args`, route
+**Pass 2 - report.** Function bodies are analyzed again with real sources (`request.args`, route
 parameters, `sys.argv`). At each call site the summary is consulted: tainted arguments flow to the
 return value (`returns_from`), reach sinks inside the callee (`sinks_from`, reported at the call site
 with a flow step pointing into the callee's file), or get cleared (`sanitizes`).
@@ -167,12 +167,12 @@ score keeps it visible instead of hiding it.
 
 ## Output
 
-* **text** — one block per finding with the full source→sink flow.
-* **json** — machine-readable with stable fingerprints (rule + file + function + normalized sink text;
+* **text** - one block per finding with the full source→sink flow.
+* **json** - machine-readable with stable fingerprints (rule + file + function + normalized sink text;
   deliberately excludes line numbers so a baseline survives unrelated edits).
-* **sarif** — SARIF 2.1.0 with `codeFlows`/`threadFlows`, so GitHub code scanning renders the path
+* **sarif** - SARIF 2.1.0 with `codeFlows`/`threadFlows`, so GitHub code scanning renders the path
   step-by-step in the PR.
-* **html** — self-contained single file for sharing.
+* **html** - self-contained single file for sharing.
 
 Files that cannot be parsed (and a scan that analyzes no file) are part of the output, not silent: they appear on
 stderr, in the JSON `errors` / `files_failed` fields and as SARIF `toolExecutionNotifications`. Exit codes are

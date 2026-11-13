@@ -1,4 +1,4 @@
-"""Helpers imported by hard_app.py — cross-file summaries must be learned from here."""
+"""Helpers imported by hard_app.py - cross-file summaries must be learned from here."""
 import os
 import sqlite3
 import subprocess

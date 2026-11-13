@@ -1,4 +1,4 @@
-"""Hard cases — written to stress the engine, not to pass.
+"""Hard cases - written to stress the engine, not to pass.
 
 Cross-file flow (see hard_helpers.py), class state, loops, try/except, async, closures,
 dict/list containers, kwargs, walrus, comprehensions, decorators, globals.

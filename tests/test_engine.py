@@ -7,7 +7,7 @@ from sinkline import scan_source
 
 
 def _src(src: str) -> str:
-    # tests write FLASK + """<indented body>""" — dedent the body, not the prefix
+    # tests write FLASK + """<indented body>""" - dedent the body, not the prefix
     if src.startswith(FLASK):
         return FLASK + textwrap.dedent(src[len(FLASK):])
     return textwrap.dedent(src)

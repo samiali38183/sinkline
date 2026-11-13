@@ -1,4 +1,4 @@
-"""Labeled benchmark corpus — FastAPI + Django-style views + CLI/socket sources."""
+"""Labeled benchmark corpus - FastAPI + Django-style views + CLI/socket sources."""
 import os
 import subprocess
 import sqlite3

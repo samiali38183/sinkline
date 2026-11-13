@@ -132,7 +132,7 @@ SINKS: List[Sink] = [
     _s("conn.execute", "SL-SQLI-001", "SQL built from tainted data", "A03:2021", "CWE-89", "critical"),
     _s("connection.execute", "SL-SQLI-001", "SQL built from tainted data", "A03:2021", "CWE-89", "critical"),
     _s("session.execute", "SL-SQLI-001", "SQL built from tainted data", "A03:2021", "CWE-89", "critical"),
-    # last-resort: any `.execute(<tainted str>)` / `.executemany(...)` — Python DB-API spelling is universal
+    # last-resort: any `.execute(<tainted str>)` / `.executemany(...)` - Python DB-API spelling is universal
     _s("execute", "SL-SQLI-001", "SQL built from tainted data", "A03:2021", "CWE-89", "critical",
        fix="Use parameterized queries; never format user input into the SQL string."),
     _s("executemany", "SL-SQLI-001", "SQL built from tainted data", "A03:2021", "CWE-89", "critical"),
