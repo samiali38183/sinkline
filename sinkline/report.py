@@ -128,7 +128,7 @@ def to_sarif(res: ScanResult, version: str) -> str:
                     }
                 },
                 "results": results,
-                "invocations": [{"executionSuccessful": True, "toolExecutionNotifications": _notifications(res)}],
+                "invocations": [{"executionSuccessful": not res.errors, "toolExecutionNotifications": _notifications(res)}],
             }
         ],
     }

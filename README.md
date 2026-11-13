@@ -40,6 +40,13 @@ $ sinkline scan vulpy        # fportantier/vulpy @ 5249cc8, one of 5 findings
   fix: Use parameterized queries: cursor.execute('... WHERE id = ?', (user_id,))
 ```
 
+Try it (Python 3.9+, no dependencies):
+
+```bash
+pip install git+https://github.com/samiali38183/sinkline@v0.5.1
+sinkline scan path/to/app
+```
+
 The source is in one file and the SQL is built in another. On the same project it reports nothing in
 the `good/` tree, which defines the same function names. The 109-line corpus was labeled by the repository
 author; see [Results](#results) and [Limitations](#limitations) before reading much into it.
@@ -266,7 +273,7 @@ are claimed. Compared with 0.5.0, 0.5.1 adds the two vulpy `mod_api.py` findings
 Python 3.9+, no dependencies.
 
 ```bash
-pip install git+https://github.com/samiali38183/sinkline
+pip install git+https://github.com/samiali38183/sinkline@v0.5.1
 sinkline scan path/to/app                       # text report with source to sink paths
 sinkline scan . --format sarif -o out.sarif      # upload to GitHub code scanning
 sinkline scan . --fail-on high                   # exit 1 for CI if anything high or critical; 2 or 3 if nothing was scanned
@@ -279,7 +286,7 @@ To see it on the benchmark instead of your own code:
 git clone https://github.com/samiali38183/sinkline && cd sinkline
 pip install -e ".[dev]"
 sinkline scan bench/corpus/flask_app.py          # 22 findings, each with its flow
-pytest -q                                        # 184 tests including the corpus gate
+pytest -q                                        # 186 tests including the corpus gate
 python bench/score.py                            # precision 1.000  recall 0.984  F1 0.992
 ```
 
@@ -313,7 +320,7 @@ A CI gate must not pass because nothing was scanned, so `sinkline scan` distingu
 
 If several apply, 2 wins over 1, and 1 over 3. Files that fail to parse are always reported: count and names
 on stderr, in the `errors` / `files_failed` fields of the JSON report, and as SARIF
-`toolExecutionNotifications` (ids `SL-NOTIFY-PARSE`, `SL-NOTIFY-NOFILES`), but they change the exit
+`toolExecutionNotifications` (ids `SL-NOTIFY-PARSE`, `SL-NOTIFY-NOFILES`; `executionSuccessful` is false when a file failed to parse), but they change the exit
 code only with `--fail-on-parse-error`. A scan that analyzes zero files always prints a warning and exits 3 under
 `--fail-on`; `--exclude-tests` that excludes everything counts as zero files.
 
@@ -323,7 +330,7 @@ exits 1 on the original scan.
 As a GitHub Action:
 
 ```yaml
-- uses: samiali38183/sinkline@main
+- uses: samiali38183/sinkline@v0.5.1
   with:
     path: .
     fail-on: high
@@ -364,14 +371,14 @@ inputs through `env:` and uses them quoted:
 `scripts/action-scan.sh` with hostile values and checks that nothing is executed and that each
 input reaches the CLI as a single argument. The same rule applies to your own workflows: never put
 `${{ github.event.* }}` or `${{ inputs.* }}` directly in `run:`. Versions before 0.4.1 used the
-unsafe form; pin the action to a commit or tag, not `@main`.
+unsafe form; pin the action to a commit or tag, as the examples do, not `@main`.
 
 As a [pre-commit](https://pre-commit.com) hook, in `.pre-commit-config.yaml`:
 
 ```yaml
 repos:
   - repo: https://github.com/samiali38183/sinkline
-    rev: main          # or a release tag
+    rev: v0.5.1
     hooks:
       - id: sinkline
         # default args: [".", "--fail-on", "high", "--exclude-tests"]
@@ -460,7 +467,7 @@ Directions that follow from the limits above; none are implemented:
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                       # 184 tests: engine unit tests plus the corpus gate
+pytest -q                       # 186 tests: engine unit tests plus the corpus gate
 python bench/score.py -v        # corpus P/R/F1, per-CWE table, per-line FP/FN listing
 pip install ruff mypy && ruff check . && mypy
 pip install bandit && python bench/compare_bandit.py

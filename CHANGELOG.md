@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- A view that returns the result of a sanitizer that does not clear CWE-79 is now reported as XSS. Before, any
+  sanitizer call in a `return` was treated as safe, so `return shlex.quote(request.args["x"])` and
+  `return os.path.basename(...)` were missed. A sanitizer that clears CWE-79 (`escape`, `html.escape`) is still safe.
+  Benchmarks are unchanged (corpus TP 60, FP 0, FN 1, TN 48; BenchmarkPython 10 taint categories 0.73 / 0.21).
+- SARIF: `invocations[0].executionSuccessful` is false when a file could not be parsed (it was always true, even next
+  to an error-level `SL-NOTIFY-PARSE` notification).
+- Tests 184 to 186.
+
 ## 0.5.1 (2026-11-11)
 
 Fixes from an outside review of 0.5.0. Benchmarks are unchanged: corpus TP 60, FP 0, FN 1, TN 48 (P 1.000 /
