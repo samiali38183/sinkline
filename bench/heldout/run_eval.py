@@ -24,7 +24,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Sequence, Set, Tuple
 
 HERE = Path(__file__).resolve().parent
 TOL = 3  # a finding matches a labeled line if it is at most this many lines away (PROTOCOL.md, "Matching")
@@ -151,7 +151,7 @@ def score_file(pos: List[int], neg: List[int], findings: List[F]) -> dict:
     used_p: Set[int] = set()
     used_f: Set[int] = set()
     matched: Dict[int, int] = {}
-    for d, L, i, j in pairs:
+    for _d, _L, i, j in pairs:
         if i in used_p or j in used_f:
             continue
         used_p.add(i)
