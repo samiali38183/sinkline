@@ -31,7 +31,7 @@ jobs:
       - run: pip install .
       - run: |
           mkdir -p _site
-          sinkline scan bench/corpus --format html -o _site/index.html
+          sinkline scan bench/corpus --format html --html-head docs/pages-head.html -o _site/index.html
           sinkline scan bench/corpus --format sarif -o _site/corpus.sarif
           python bench/score.py --json _site/score.json
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1

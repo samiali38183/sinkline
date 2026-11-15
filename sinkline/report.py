@@ -168,7 +168,7 @@ footer{color:var(--mut);font-size:12px;padding:0 32px 32px}
 """
 
 
-def to_html(res: ScanResult, version: str, target: str = "") -> str:
+def to_html(res: ScanResult, version: str, target: str = "", head_extra: str = "") -> str:
     by = res.by_owasp()
     sev_counts: Dict[str, int] = {}
     for f in res.findings:
@@ -203,7 +203,7 @@ def to_html(res: ScanResult, version: str, target: str = "") -> str:
     body = "".join(items) if items else '<div class="empty">No tainted flows reached a sink.</div>'
     now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>sinkline report</title><style>{_CSS}</style></head><body>
+<title>sinkline report</title>{head_extra}<style>{_CSS}</style></head><body>
 <header><h1>sinkline <small>v{version} · {html.escape(target)} · {now}</small></h1>
 <div class="kpis"><div class="kpi"><b>{len(res.findings)}</b><span>findings</span></div>
 <div class="kpi"><b>{sev_counts.get("critical", 0)}</b><span>critical</span></div>

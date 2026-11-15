@@ -69,7 +69,14 @@ def _cmd_scan(a: argparse.Namespace) -> int:
     elif fmt == "sarif":
         out = to_sarif(res, __version__)
     elif fmt == "html":
-        out = to_html(res, __version__, a.path)
+        head_extra = ""
+        if a.html_head:
+            try:
+                head_extra = Path(a.html_head).read_text(encoding="utf-8").strip()
+            except OSError as e:
+                print(f"sinkline: cannot read --html-head file: {e}", file=sys.stderr)
+                return EXIT_ERROR
+        out = to_html(res, __version__, a.path, head_extra)
     else:
         color = sys.stdout.isatty() and not a.no_color and os.environ.get("NO_COLOR") is None
         out = to_text(res, color=color)
@@ -150,6 +157,7 @@ def main(argv=None) -> int:
     s.add_argument("path")
     s.add_argument("--format", "-f", choices=["text", "json", "sarif", "html"], default="text")
     s.add_argument("--output", "-o")
+    s.add_argument("--html-head", help="file with extra markup (for example meta tags) to insert into the <head> of the HTML report")
     s.add_argument("--fail-on", choices=_SEV, help="exit 1 if any finding at or above this severity; exit 3 if no file was analyzed")
     s.add_argument("--fail-on-parse-error", action="store_true", help="exit 3 if any file could not be read or parsed")
     s.add_argument("--baseline", help="JSON report; suppress findings whose fingerprint is already in it")
