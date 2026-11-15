@@ -1,0 +1,2308 @@
+{
+ "dirs": {
+  "CWE-022-PathInjection": {
+   "cwes": [
+    22,
+    23,
+    36,
+    73
+   ],
+   "files": {
+    "fastapi_path_injection.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 7,
+       "why": "alert"
+      }
+     ],
+     "sha256": "5ec4731143fbe26576ac7dc34003dda0c0f028c3afafca9020d26e30a2294fb4"
+    },
+    "flask_path_injection.py": {
+     "negatives": [
+      {
+       "line": 13,
+       "why": "result=OK"
+      }
+     ],
+     "positives": [
+      {
+       "line": 21,
+       "why": "alert"
+      }
+     ],
+     "sha256": "16f3a2776572ef2280ffeaea8ec16432c69b100153ff1ee3615f7ec7475538f3"
+    },
+    "path_injection.py": {
+     "negatives": [
+      {
+       "line": 40,
+       "why": "result=OK"
+      },
+      {
+       "line": 57,
+       "why": "result=OK"
+      },
+      {
+       "line": 74,
+       "why": "result=OK"
+      },
+      {
+       "line": 87,
+       "why": "spurious"
+      },
+      {
+       "line": 94,
+       "why": "spurious"
+      },
+      {
+       "line": 142,
+       "why": "spurious"
+      },
+      {
+       "line": 152,
+       "why": "spurious"
+      }
+     ],
+     "positives": [
+      {
+       "line": 13,
+       "why": "alert"
+      },
+      {
+       "line": 21,
+       "why": "alert"
+      },
+      {
+       "line": 31,
+       "why": "alert"
+      },
+      {
+       "line": 48,
+       "why": "alert"
+      },
+      {
+       "line": 65,
+       "why": "alert"
+      },
+      {
+       "line": 102,
+       "why": "alert"
+      },
+      {
+       "line": 113,
+       "why": "alert"
+      },
+      {
+       "line": 124,
+       "why": "alert"
+      },
+      {
+       "line": 132,
+       "why": "alert"
+      }
+     ],
+     "sha256": "40788296ca410abbf57805cf2dfa13ce842f6e703b10622a2e179ab1d2c59d12"
+    },
+    "pathlib_use.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 14,
+       "why": "alert"
+      },
+      {
+       "line": 17,
+       "why": "alert"
+      }
+     ],
+     "sha256": "a8bd87258d9bc42c146599738da551f47a9c851ec1325f3aaa58c0d0a5c03384"
+    },
+    "test.py": {
+     "negatives": [
+      {
+       "line": 41,
+       "why": "result=OK"
+      }
+     ],
+     "positives": [
+      {
+       "line": 19,
+       "why": "alert"
+      },
+      {
+       "line": 26,
+       "why": "alert"
+      },
+      {
+       "line": 33,
+       "why": "alert"
+      },
+      {
+       "line": 49,
+       "why": "alert"
+      }
+     ],
+     "sha256": "f3e7c5fedbc49b82362e0235628c61a4d7056ef4238351458137653d79ff7e01"
+    },
+    "test_chaining.py": {
+     "negatives": [
+      {
+       "line": 23,
+       "why": "result=OK"
+      },
+      {
+       "line": 32,
+       "why": "result=OK"
+      },
+      {
+       "line": 45,
+       "why": "result=OK"
+      }
+     ],
+     "positives": [],
+     "sha256": "0b47fc8152da339847d328a55991e009bdc4384d18f1626df658efb0127ae956"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-022-TarSlip": {
+   "cwes": [
+    22,
+    23
+   ],
+   "files": {
+    "tarslip.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 15,
+       "why": "alert"
+      },
+      {
+       "line": 20,
+       "why": "alert"
+      },
+      {
+       "line": 39,
+       "why": "alert"
+      },
+      {
+       "line": 43,
+       "why": "alert"
+      },
+      {
+       "line": 61,
+       "why": "alert"
+      },
+      {
+       "line": 91,
+       "why": "alert"
+      },
+      {
+       "line": 96,
+       "why": "alert"
+      },
+      {
+       "line": 110,
+       "why": "alert"
+      },
+      {
+       "line": 113,
+       "why": "alert"
+      },
+      {
+       "line": 121,
+       "why": "alert"
+      },
+      {
+       "line": 125,
+       "why": "alert"
+      }
+     ],
+     "sha256": "6adbb4e934cc4367976b9590ed7ae5e6ee407d52622e960aff2e5622439b78a6"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-074-TemplateInjection": {
+   "cwes": [
+    74,
+    94,
+    95,
+    1336
+   ],
+   "files": {
+    "JinjaSsti.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 10,
+       "why": "alert"
+      },
+      {
+       "line": 21,
+       "why": "alert"
+      }
+     ],
+     "sha256": "7b4191c2a57798ef325044b604531312887b57482c1cc733c3209073e131ef08"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-078-CommandInjection": {
+   "cwes": [
+    77,
+    78,
+    88
+   ],
+   "files": {
+    "command_injection.py": {
+     "negatives": [
+      {
+       "line": 80,
+       "why": "spurious"
+      }
+     ],
+     "positives": [
+      {
+       "line": 13,
+       "why": "alert"
+      },
+      {
+       "line": 20,
+       "why": "alert"
+      },
+      {
+       "line": 26,
+       "why": "alert"
+      },
+      {
+       "line": 33,
+       "why": "alert"
+      },
+      {
+       "line": 41,
+       "why": "alert"
+      },
+      {
+       "line": 42,
+       "why": "alert"
+      },
+      {
+       "line": 55,
+       "why": "alert"
+      },
+      {
+       "line": 56,
+       "why": "alert"
+      },
+      {
+       "line": 57,
+       "why": "alert"
+      },
+      {
+       "line": 58,
+       "why": "alert"
+      },
+      {
+       "line": 59,
+       "why": "alert"
+      },
+      {
+       "line": 73,
+       "why": "alert"
+      }
+     ],
+     "sha256": "cca25fccbcf7f4c8a9e3b91ef423dbfcefaa831f229c43f0527a428ef3a89dd5"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-079-Jinja2WithoutEscaping": {
+   "cwes": [
+    79,
+    94
+   ],
+   "files": {
+    "jinja2_escaping.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 9,
+       "why": "alert"
+      },
+      {
+       "line": 41,
+       "why": "alert"
+      },
+      {
+       "line": 43,
+       "why": "alert"
+      },
+      {
+       "line": 44,
+       "why": "alert"
+      },
+      {
+       "line": 50,
+       "why": "alert"
+      },
+      {
+       "line": 53,
+       "why": "alert"
+      }
+     ],
+     "sha256": "bd9f2e87b67651dbd5b07ae5503f1db8994d2e45d65b163081482fee4e0b6d9d"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-079-ReflectedXss": {
+   "cwes": [
+    79,
+    80
+   ],
+   "files": {
+    "reflected_xss.py": {
+     "negatives": [
+      {
+       "line": 28,
+       "why": "spurious"
+      }
+     ],
+     "positives": [
+      {
+       "line": 10,
+       "why": "alert"
+      },
+      {
+       "line": 22,
+       "why": "alert"
+      }
+     ],
+     "sha256": "a0ebe3f453ba714982352f6f027010d259bb87abdbc4feba1020ced784e49ef6"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-089-SqlInjection": {
+   "cwes": [
+    89
+   ],
+   "files": {
+    "app.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 23,
+       "why": "alert"
+      },
+      {
+       "line": 30,
+       "why": "alert"
+      },
+      {
+       "line": 37,
+       "why": "alert"
+      },
+      {
+       "line": 44,
+       "why": "alert"
+      },
+      {
+       "line": 51,
+       "why": "alert"
+      }
+     ],
+     "sha256": "c22b772d0ba105576d12f6889005b643425f06abf3a3e63979d54cd15e1b16c4"
+    },
+    "db_connection.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "c436fbaa3b2a1a8f3bbdec45329faab9743ffa4173976abeaf6fbc50d7539b44"
+    },
+    "sql_injection.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 21,
+       "why": "alert"
+      },
+      {
+       "line": 24,
+       "why": "alert"
+      },
+      {
+       "line": 25,
+       "why": "alert"
+      },
+      {
+       "line": 26,
+       "why": "alert"
+      }
+     ],
+     "sha256": "2a4d854f582080575b1a17985159c9516c336a262258047ab82b2fd36a72df7a"
+    },
+    "sqlalchemy_textclause.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 27,
+       "why": "alert"
+      },
+      {
+       "line": 31,
+       "why": "alert"
+      },
+      {
+       "line": 41,
+       "why": "alert"
+      },
+      {
+       "line": 42,
+       "why": "alert"
+      },
+      {
+       "line": 43,
+       "why": "alert"
+      },
+      {
+       "line": 44,
+       "why": "alert"
+      },
+      {
+       "line": 45,
+       "why": "alert"
+      },
+      {
+       "line": 46,
+       "why": "alert"
+      },
+      {
+       "line": 47,
+       "why": "alert"
+      },
+      {
+       "line": 48,
+       "why": "alert"
+      },
+      {
+       "line": 50,
+       "why": "alert"
+      },
+      {
+       "line": 51,
+       "why": "alert"
+      }
+     ],
+     "sha256": "99047673b251d4a39113b6e95b71daf4685df1939784f4d25aa54c3668506253"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-090-LdapInjection": {
+   "cwes": [
+    90
+   ],
+   "files": {
+    "ldap3_bad.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 21,
+       "why": "alert"
+      },
+      {
+       "line": 38,
+       "why": "alert"
+      }
+     ],
+     "sha256": "425faa774a14f5b8cc0ea0a1f5521d17ed61a8bf41343aa55b7fbf54fe2b3327"
+    },
+    "ldap3_good.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "d49d5e2293f2064fe391cdf2428a69fee8f1606a05d8b960f71ca2f3c8d91e1a"
+    },
+    "ldap_bad.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 21,
+       "why": "alert"
+      },
+      {
+       "line": 37,
+       "why": "alert"
+      },
+      {
+       "line": 55,
+       "why": "alert"
+      }
+     ],
+     "sha256": "dc218b02b9cd63320bd32bb78391f4969756ba3f46803669dedcae5fe3b07a64"
+    },
+    "ldap_good.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "0f7443f7db8295ce85e0eb426aec880cbe5240b9a96f64d1e548a3589d9d49e7"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-094-CodeInjection": {
+   "cwes": [
+    94,
+    95,
+    96
+   ],
+   "files": {
+    "code_injection.py": {
+     "negatives": [
+      {
+       "line": 21,
+       "why": "spurious"
+      }
+     ],
+     "positives": [
+      {
+       "line": 7,
+       "why": "alert"
+      },
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 10,
+       "why": "alert"
+      }
+     ],
+     "sha256": "a83a3354b7086adc29e9d080260cd9d474aea95fe42e3f8b07438cb0ae48d582"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-1004-NonHttpOnlyCookie": {
+   "cwes": [
+    614,
+    1004,
+    1275
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 9,
+       "why": "alert"
+      },
+      {
+       "line": 11,
+       "why": "alert"
+      }
+     ],
+     "sha256": "159a1708afb6d4669faad2e6daf25eb79af5af9bd76d01836a1206da3209c1a8"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-117-LogInjection": {
+   "cwes": [
+    117
+   ],
+   "files": {
+    "LogInjectionBad.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 18,
+       "why": "alert"
+      },
+      {
+       "line": 24,
+       "why": "alert"
+      },
+      {
+       "line": 30,
+       "why": "alert"
+      },
+      {
+       "line": 37,
+       "why": "alert"
+      }
+     ],
+     "sha256": "8bdb1fba8416e67ae68e399a73bcb720e9afc3496d0ca26030543167b291e982"
+    },
+    "LogInjectionGood.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "f13a8ec46b12a1c3bce1adfb92558f5074c1819cdae0cf5683ed2502679e4a21"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-1275-SameSiteNoneCookie": {
+   "cwes": [
+    614,
+    1004,
+    1275
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 10,
+       "why": "alert"
+      },
+      {
+       "line": 13,
+       "why": "alert"
+      }
+     ],
+     "sha256": "3ed2ed24e0f16eab8498110b12c885272e9e35c0ff0c8922b558f67675d6186a"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-209-StackTraceExposure": {
+   "cwes": [
+    209,
+    497
+   ],
+   "files": {
+    "Exceptions.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "531ad44a0ed2b729be24127cdec9537374f5fab89500cc304b3ed4e2926d4bca"
+    },
+    "Stacktrace.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "73ffe04dc43a7e0b4433a01079c5011ff4c111b81ae45d87d608efc07fc7d279"
+    },
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 16,
+       "why": "alert"
+      },
+      {
+       "line": 24,
+       "why": "alert"
+      },
+      {
+       "line": 32,
+       "why": "alert"
+      },
+      {
+       "line": 50,
+       "why": "alert"
+      },
+      {
+       "line": 66,
+       "why": "alert"
+      }
+     ],
+     "sha256": "4240e095506273efc824e1f6399fdc95e7cc71d4df0f40b56465b64c77087c68"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-215-FlaskDebug": {
+   "cwes": [
+    94,
+    215,
+    489
+   ],
+   "files": {
+    "settings.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "06bf984f3bcd4ceb388f79917215184b9b898fc0cbedb7cbc342ee03e32dccd2"
+    },
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 10,
+       "why": "alert"
+      },
+      {
+       "line": 11,
+       "why": "alert"
+      },
+      {
+       "line": 26,
+       "why": "alert"
+      },
+      {
+       "line": 30,
+       "why": "alert"
+      },
+      {
+       "line": 38,
+       "why": "alert"
+      },
+      {
+       "line": 43,
+       "why": "alert"
+      }
+     ],
+     "sha256": "edfe6e157bdbbf94b6d99f5e07432be1008c73a74f74303016b391a00576799b"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-285-PamAuthorization": {
+   "cwes": [
+    285
+   ],
+   "files": {
+    "pam_test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 76,
+       "why": "alert"
+      }
+     ],
+     "sha256": "951fdd1545675297d30b51adcc777275cad4c43420a1d2bd4a2dca78ab5c3761"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-295-MissingHostKeyValidation": {
+   "cwes": [
+    295,
+    297
+   ],
+   "files": {
+    "paramiko_host_key.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 5,
+       "why": "alert"
+      },
+      {
+       "line": 7,
+       "why": "alert"
+      },
+      {
+       "line": 11,
+       "why": "alert"
+      },
+      {
+       "line": 13,
+       "why": "alert"
+      },
+      {
+       "line": 20,
+       "why": "alert"
+      }
+     ],
+     "sha256": "235a3af34af7fb1c1ba91e6b05973adae2bfa00e6c2cb7801fe9e987d2032b89"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-295-RequestWithoutValidation": {
+   "cwes": [
+    295,
+    297
+   ],
+   "files": {
+    "make_request.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 5,
+       "why": "alert"
+      },
+      {
+       "line": 7,
+       "why": "alert"
+      },
+      {
+       "line": 12,
+       "why": "alert"
+      },
+      {
+       "line": 28,
+       "why": "alert"
+      },
+      {
+       "line": 34,
+       "why": "alert"
+      },
+      {
+       "line": 41,
+       "why": "alert"
+      }
+     ],
+     "sha256": "1c79d25a17e01f93c15d67410ec87ee170305fe3ce883f065a9d2fe8e7f235da"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-312-CleartextLogging": {
+   "cwes": [
+    312,
+    313,
+    315,
+    359,
+    532
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 20,
+       "why": "alert"
+      },
+      {
+       "line": 22,
+       "why": "alert"
+      },
+      {
+       "line": 23,
+       "why": "alert"
+      },
+      {
+       "line": 27,
+       "why": "alert"
+      },
+      {
+       "line": 30,
+       "why": "alert"
+      },
+      {
+       "line": 37,
+       "why": "alert"
+      },
+      {
+       "line": 39,
+       "why": "alert"
+      },
+      {
+       "line": 40,
+       "why": "alert"
+      },
+      {
+       "line": 45,
+       "why": "alert"
+      },
+      {
+       "line": 49,
+       "why": "alert"
+      },
+      {
+       "line": 50,
+       "why": "alert"
+      },
+      {
+       "line": 52,
+       "why": "alert"
+      },
+      {
+       "line": 55,
+       "why": "alert"
+      },
+      {
+       "line": 56,
+       "why": "alert"
+      },
+      {
+       "line": 57,
+       "why": "alert"
+      },
+      {
+       "line": 60,
+       "why": "alert"
+      },
+      {
+       "line": 61,
+       "why": "alert"
+      },
+      {
+       "line": 64,
+       "why": "alert"
+      },
+      {
+       "line": 65,
+       "why": "alert"
+      },
+      {
+       "line": 68,
+       "why": "alert"
+      },
+      {
+       "line": 69,
+       "why": "alert"
+      },
+      {
+       "line": 70,
+       "why": "alert"
+      },
+      {
+       "line": 71,
+       "why": "missing"
+      },
+      {
+       "line": 72,
+       "why": "missing"
+      },
+      {
+       "line": 73,
+       "why": "alert"
+      },
+      {
+       "line": 74,
+       "why": "alert"
+      }
+     ],
+     "sha256": "9c99a0e800b4626bb75978c62acbfe5a43eef50176e366f1538220157b2b3580"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-312-CleartextStorage-py3": {
+   "cwes": [
+    312,
+    313,
+    315,
+    359,
+    532
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 12,
+       "why": "alert"
+      },
+      {
+       "line": 13,
+       "why": "alert"
+      },
+      {
+       "line": 15,
+       "why": "alert"
+      }
+     ],
+     "sha256": "3656c61c34b279bb886126b8f9722ed901e853bee928649aee873436d99310e6"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-326-WeakCryptoKey": {
+   "cwes": [
+    326,
+    327
+   ],
+   "files": {
+    "test_example.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "7d9d9999685a17d621437c7d303b318cbfb02704282ffb0cfbc0774f969c4676"
+    },
+    "weak_crypto.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 68,
+       "why": "alert"
+      },
+      {
+       "line": 69,
+       "why": "alert"
+      },
+      {
+       "line": 70,
+       "why": "alert"
+      },
+      {
+       "line": 72,
+       "why": "alert"
+      },
+      {
+       "line": 73,
+       "why": "alert"
+      },
+      {
+       "line": 74,
+       "why": "alert"
+      },
+      {
+       "line": 76,
+       "why": "alert"
+      },
+      {
+       "line": 77,
+       "why": "alert"
+      },
+      {
+       "line": 84,
+       "why": "alert"
+      }
+     ],
+     "sha256": "d39d061d6fbb43c6ef5bedf1eedc5b1ce5b2e5c5d31e99b20a4fbae43ea7f4df"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-327-BrokenCryptoAlgorithm": {
+   "cwes": [
+    310,
+    326,
+    327,
+    328
+   ],
+   "files": {
+    "test_cryptodome.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 11,
+       "why": "alert"
+      },
+      {
+       "line": 16,
+       "why": "alert"
+      }
+     ],
+     "sha256": "137659dfcf45e8f32b7cd8b3d526c8a11eebb63080ebbeac4d0c3a8e870de2a9"
+    },
+    "test_cryptography.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 13,
+       "why": "alert"
+      },
+      {
+       "line": 22,
+       "why": "alert"
+      }
+     ],
+     "sha256": "66e422e0d6854d1111c79c19f599cd0d2ee7e5a1ff867c737c1431d1ba83c4f3"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-327-InsecureDefaultProtocol": {
+   "cwes": [
+    295,
+    326,
+    327
+   ],
+   "files": {
+    "InsecureProtocol.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 7,
+       "why": "alert"
+      }
+     ],
+     "sha256": "1f64033871181ba386b24d68436157dea8e209b9353077c3d463179b8927ccc3"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-327-InsecureProtocol": {
+   "cwes": [
+    295,
+    326,
+    327
+   ],
+   "files": {
+    "InsecureProtocol.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 6,
+       "why": "alert"
+      },
+      {
+       "line": 7,
+       "why": "alert"
+      },
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 10,
+       "why": "alert"
+      },
+      {
+       "line": 11,
+       "why": "alert"
+      },
+      {
+       "line": 12,
+       "why": "alert"
+      },
+      {
+       "line": 14,
+       "why": "alert"
+      },
+      {
+       "line": 15,
+       "why": "alert"
+      },
+      {
+       "line": 16,
+       "why": "alert"
+      },
+      {
+       "line": 19,
+       "why": "alert"
+      },
+      {
+       "line": 23,
+       "why": "alert"
+      },
+      {
+       "line": 24,
+       "why": "alert"
+      }
+     ],
+     "sha256": "dd3666faf054c6f9c80936101b1a01d2b5e493336c21998a4a9e9e967315e604"
+    },
+    "import_all_one_file.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 25,
+       "why": "alert"
+      },
+      {
+       "line": 29,
+       "why": "alert"
+      }
+     ],
+     "sha256": "8846ac89e879ae6fa885eac215e67a675c25f4a782dbf6b113b2cadf1702c34a"
+    },
+    "import_def.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "21fece6165b52a633a08cf4eff0264e98a63fc45b1da0130ae2df3a19435123b"
+    },
+    "import_use.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 13,
+       "why": "alert"
+      },
+      {
+       "line": 17,
+       "why": "alert"
+      }
+     ],
+     "sha256": "7ea5fe3623b15d36364e37b8dc0b49a805b720c6f689b575278d3f8836208f41"
+    },
+    "pyOpenSSL_fluent.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 18,
+       "why": "alert"
+      }
+     ],
+     "sha256": "af40821ee361e48c9e7f4a2a59bfd9c4d2db4c70a89a0482a2175fdb319d0ba6"
+    },
+    "ssl_fluent.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 9,
+       "why": "alert"
+      },
+      {
+       "line": 19,
+       "why": "alert"
+      },
+      {
+       "line": 28,
+       "why": "alert"
+      },
+      {
+       "line": 37,
+       "why": "alert"
+      },
+      {
+       "line": 57,
+       "why": "alert"
+      },
+      {
+       "line": 71,
+       "why": "alert"
+      },
+      {
+       "line": 77,
+       "why": "alert"
+      },
+      {
+       "line": 97,
+       "why": "alert"
+      },
+      {
+       "line": 146,
+       "why": "alert"
+      },
+      {
+       "line": 165,
+       "why": "alert"
+      }
+     ],
+     "sha256": "643d2adec736088d5cbb1239b1eb9e24341aa08839f59b69710177bbed9b8eb5"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-327-WeakSensitiveDataHashing": {
+   "cwes": [
+    327,
+    328,
+    916
+   ],
+   "files": {
+    "test_cryptodome.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 15,
+       "why": "alert"
+      },
+      {
+       "line": 24,
+       "why": "alert"
+      }
+     ],
+     "sha256": "8da2cd751728231815bd1e9fbb8631ea627f038cf4c244b3389ba5de1b1795b3"
+    },
+    "test_cryptography.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 9,
+       "why": "alert"
+      },
+      {
+       "line": 17,
+       "why": "alert"
+      },
+      {
+       "line": 27,
+       "why": "alert"
+      }
+     ],
+     "sha256": "9836b5c43ceecbcb6cbae1c076aafdfa9790f8bd9f2bd07b1913fe8e2557b793"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-377-InsecureTemporaryFile": {
+   "cwes": [
+    377,
+    379
+   ],
+   "files": {
+    "InsecureTemporaryFile.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 5,
+       "why": "alert"
+      },
+      {
+       "line": 11,
+       "why": "alert"
+      },
+      {
+       "line": 17,
+       "why": "alert"
+      }
+     ],
+     "sha256": "7a6c159aa1f11c6a7c07fb9f298e22b9970bc8dc9059aa71e42bbe95e604727f"
+    },
+    "SecureTemporaryFile.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "073e7e37b8ae364cd688adcecb4a7eb56886708c67d0b477ab014ae9e1332028"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-502-UnsafeDeserialization": {
+   "cwes": [
+    502
+   ],
+   "files": {
+    "unsafe_deserialization.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 15,
+       "why": "alert"
+      },
+      {
+       "line": 16,
+       "why": "alert"
+      },
+      {
+       "line": 18,
+       "why": "alert"
+      },
+      {
+       "line": 21,
+       "why": "alert"
+      },
+      {
+       "line": 24,
+       "why": "alert"
+      }
+     ],
+     "sha256": "e877b51d1fb75d5c5ed897f0c681499247b5e140fcc7b0391e70444ffc4fca6a"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-601-UrlRedirect": {
+   "cwes": [
+    601
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [
+      {
+       "line": 32,
+       "why": "spurious"
+      },
+      {
+       "line": 39,
+       "why": "spurious"
+      },
+      {
+       "line": 46,
+       "why": "spurious"
+      }
+     ],
+     "positives": [
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 62,
+       "why": "alert"
+      },
+      {
+       "line": 69,
+       "why": "alert"
+      },
+      {
+       "line": 76,
+       "why": "alert"
+      },
+      {
+       "line": 83,
+       "why": "alert"
+      },
+      {
+       "line": 93,
+       "why": "alert"
+      },
+      {
+       "line": 114,
+       "why": "alert"
+      },
+      {
+       "line": 140,
+       "why": "alert"
+      },
+      {
+       "line": 148,
+       "why": "alert"
+      }
+     ],
+     "sha256": "cf514fd92b250c352c1f77acf6612e7d0ffd929b0d1d0f378049095bdbbe1d26"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-611-Xxe": {
+   "cwes": [
+    611,
+    776
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 10,
+       "why": "alert"
+      },
+      {
+       "line": 31,
+       "why": "alert"
+      }
+     ],
+     "sha256": "c83cd58d83c19be65d2254232a96931d1c000e2aa627402a378ce87c3ee9d400"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-614-InsecureCookie": {
+   "cwes": [
+    614,
+    1004,
+    1275
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 10,
+       "why": "alert"
+      },
+      {
+       "line": 11,
+       "why": "alert"
+      }
+     ],
+     "sha256": "368124cde517f16aef31aa074c1274e347c14e3d4321337f1daa6b19d40e31ee"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-643-XPathInjection": {
+   "cwes": [
+    643
+   ],
+   "files": {
+    "xpath.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "5ce693563c6bf4c564a05d150295313272059ade601269f4c9def72ab91785c3"
+    },
+    "xpathBad.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 13,
+       "why": "alert"
+      }
+     ],
+     "sha256": "1eb03f80712bbb508b818241f9bb3987fc94ab38519bb384f109357bfc48ef17"
+    },
+    "xpathFlow.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 14,
+       "why": "alert"
+      },
+      {
+       "line": 23,
+       "why": "alert"
+      },
+      {
+       "line": 32,
+       "why": "alert"
+      },
+      {
+       "line": 41,
+       "why": "alert"
+      },
+      {
+       "line": 49,
+       "why": "alert"
+      }
+     ],
+     "sha256": "cdc2b851e11bf3c80072f8884b2e357a95c3b2e283af93db2d7a2a75255f1ae9"
+    },
+    "xpathGood.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "1fa2e4019a14d752c22623b51d0f0138e640769130e0f85366f8e7d058c0af6c"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-730-RegexInjection": {
+   "cwes": [
+    730,
+    1333
+   ],
+   "files": {
+    "re_bad.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 14,
+       "why": "alert"
+      },
+      {
+       "line": 25,
+       "why": "alert"
+      },
+      {
+       "line": 37,
+       "why": "alert"
+      }
+     ],
+     "sha256": "014981832b8cc2fe399f44d2a7f653e1a50e7f3513fcb403a9ae12b6dcdf0a66"
+    },
+    "re_good.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "c92b008a2eb85e3f57a4eff871a5adcfbcf2f00e1659f5002907a21e7138e62f"
+    },
+    "re_prefixmatch.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 13,
+       "why": "alert"
+      },
+      {
+       "line": 18,
+       "why": "alert"
+      },
+      {
+       "line": 23,
+       "why": "alert"
+      },
+      {
+       "line": 29,
+       "why": "alert"
+      }
+     ],
+     "sha256": "ce9b387eaf228399d277f274646ca98eb5165cab0913f2a9910bf00b25b04d83"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-732-WeakFilePermissions": {
+   "cwes": [
+    276,
+    732
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 7,
+       "why": "alert"
+      },
+      {
+       "line": 8,
+       "why": "alert"
+      },
+      {
+       "line": 9,
+       "why": "alert"
+      },
+      {
+       "line": 11,
+       "why": "alert"
+      },
+      {
+       "line": 14,
+       "why": "alert"
+      },
+      {
+       "line": 16,
+       "why": "alert"
+      }
+     ],
+     "sha256": "b01140b025868716f5c95db5e66efda5641c384a3b94a7e420cd23c86920d4df"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-798-HardcodedCredentials": {
+   "cwes": [
+    259,
+    321,
+    547,
+    798
+   ],
+   "files": {
+    "test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 5,
+       "why": "alert"
+      },
+      {
+       "line": 6,
+       "why": "alert"
+      }
+     ],
+     "sha256": "d2eb79146191713fadacff358885b115df22554c41bcbea7b936993a0d979082"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-918-ServerSideRequestForgery": {
+   "cwes": [
+    918
+   ],
+   "files": {
+    "full_partial_test.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 11,
+       "why": "alert"
+      },
+      {
+       "line": 15,
+       "why": "alert"
+      },
+      {
+       "line": 22,
+       "why": "alert"
+      },
+      {
+       "line": 27,
+       "why": "alert"
+      },
+      {
+       "line": 47,
+       "why": "alert"
+      },
+      {
+       "line": 51,
+       "why": "alert"
+      },
+      {
+       "line": 55,
+       "why": "alert"
+      },
+      {
+       "line": 59,
+       "why": "alert"
+      },
+      {
+       "line": 63,
+       "why": "alert"
+      },
+      {
+       "line": 72,
+       "why": "alert"
+      },
+      {
+       "line": 76,
+       "why": "alert"
+      },
+      {
+       "line": 80,
+       "why": "alert"
+      },
+      {
+       "line": 89,
+       "why": "alert"
+      },
+      {
+       "line": 93,
+       "why": "alert"
+      },
+      {
+       "line": 97,
+       "why": "alert"
+      },
+      {
+       "line": 105,
+       "why": "alert"
+      },
+      {
+       "line": 112,
+       "why": "alert"
+      },
+      {
+       "line": 119,
+       "why": "alert"
+      },
+      {
+       "line": 126,
+       "why": "alert"
+      },
+      {
+       "line": 136,
+       "why": "alert"
+      },
+      {
+       "line": 143,
+       "why": "alert"
+      },
+      {
+       "line": 179,
+       "why": "missing"
+      },
+      {
+       "line": 189,
+       "why": "missing"
+      }
+     ],
+     "sha256": "08f797160a37cc602fd281b223461aa072400fa83cb96918e92077dd35f0efda"
+    },
+    "test_azure_client.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 15,
+       "why": "alert"
+      },
+      {
+       "line": 16,
+       "why": "alert"
+      },
+      {
+       "line": 17,
+       "why": "alert"
+      },
+      {
+       "line": 18,
+       "why": "alert"
+      },
+      {
+       "line": 19,
+       "why": "alert"
+      },
+      {
+       "line": 20,
+       "why": "alert"
+      },
+      {
+       "line": 21,
+       "why": "alert"
+      },
+      {
+       "line": 22,
+       "why": "alert"
+      },
+      {
+       "line": 24,
+       "why": "alert"
+      },
+      {
+       "line": 25,
+       "why": "alert"
+      }
+     ],
+     "sha256": "a507303af6233784c2ad8407bd10a5cdb2f71d36643ddf5f2bb32f9ca9e0281e"
+    },
+    "test_http_client.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 15,
+       "why": "alert"
+      },
+      {
+       "line": 21,
+       "why": "alert"
+      },
+      {
+       "line": 25,
+       "why": "alert"
+      },
+      {
+       "line": 30,
+       "why": "alert"
+      },
+      {
+       "line": 34,
+       "why": "alert"
+      },
+      {
+       "line": 39,
+       "why": "alert"
+      },
+      {
+       "line": 44,
+       "why": "alert"
+      }
+     ],
+     "sha256": "ecc7c441d5f1d635c537973220b808c295661093f3c38a9b77e3c164d7395f40"
+    },
+    "test_path_validation.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 14,
+       "why": "alert"
+      },
+      {
+       "line": 16,
+       "why": "alert"
+      },
+      {
+       "line": 19,
+       "why": "alert"
+      },
+      {
+       "line": 21,
+       "why": "alert"
+      },
+      {
+       "line": 30,
+       "why": "alert"
+      },
+      {
+       "line": 32,
+       "why": "alert"
+      },
+      {
+       "line": 35,
+       "why": "alert"
+      },
+      {
+       "line": 37,
+       "why": "alert"
+      },
+      {
+       "line": 46,
+       "why": "alert"
+      },
+      {
+       "line": 48,
+       "why": "alert"
+      },
+      {
+       "line": 51,
+       "why": "alert"
+      },
+      {
+       "line": 53,
+       "why": "alert"
+      },
+      {
+       "line": 64,
+       "why": "alert"
+      },
+      {
+       "line": 66,
+       "why": "alert"
+      },
+      {
+       "line": 69,
+       "why": "alert"
+      },
+      {
+       "line": 71,
+       "why": "alert"
+      },
+      {
+       "line": 74,
+       "why": "alert"
+      },
+      {
+       "line": 76,
+       "why": "alert"
+      },
+      {
+       "line": 79,
+       "why": "alert"
+      },
+      {
+       "line": 81,
+       "why": "alert"
+      },
+      {
+       "line": 85,
+       "why": "alert"
+      },
+      {
+       "line": 87,
+       "why": "alert"
+      },
+      {
+       "line": 90,
+       "why": "alert"
+      },
+      {
+       "line": 92,
+       "why": "alert"
+      },
+      {
+       "line": 95,
+       "why": "alert"
+      },
+      {
+       "line": 97,
+       "why": "alert"
+      },
+      {
+       "line": 100,
+       "why": "alert"
+      },
+      {
+       "line": 102,
+       "why": "alert"
+      },
+      {
+       "line": 105,
+       "why": "alert"
+      },
+      {
+       "line": 107,
+       "why": "alert"
+      },
+      {
+       "line": 110,
+       "why": "alert"
+      },
+      {
+       "line": 112,
+       "why": "alert"
+      },
+      {
+       "line": 115,
+       "why": "alert"
+      },
+      {
+       "line": 117,
+       "why": "alert"
+      },
+      {
+       "line": 120,
+       "why": "alert"
+      },
+      {
+       "line": 122,
+       "why": "alert"
+      },
+      {
+       "line": 125,
+       "why": "alert"
+      },
+      {
+       "line": 127,
+       "why": "alert"
+      },
+      {
+       "line": 130,
+       "why": "alert"
+      },
+      {
+       "line": 132,
+       "why": "alert"
+      }
+     ],
+     "sha256": "a03973a6695f311d9937b34b041a229fd551e477fcf08cfc6979116a4e8955df"
+    },
+    "test_re_prefixmatch.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 11,
+       "why": "alert"
+      },
+      {
+       "line": 19,
+       "why": "alert"
+      },
+      {
+       "line": 28,
+       "why": "alert"
+      },
+      {
+       "line": 37,
+       "why": "alert"
+      }
+     ],
+     "sha256": "cc94c8f7f1a7d6195245d3051218a7fa765b5ad9617810e0d02cfc00abc55e97"
+    },
+    "test_requests.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 9,
+       "why": "alert"
+      },
+      {
+       "line": 17,
+       "why": "alert"
+      },
+      {
+       "line": 22,
+       "why": "alert"
+      },
+      {
+       "line": 40,
+       "why": "missing"
+      },
+      {
+       "line": 51,
+       "why": "missing"
+      }
+     ],
+     "sha256": "a8aa5a826c732c4e90aca4db850e1d44054441449e347f46e012a5c4da4859e6"
+    }
+   },
+   "tier": "taint"
+  },
+  "CWE-942-CorsMisconfigurationMiddleware": {
+   "cwes": [
+    942
+   ],
+   "files": {
+    "fastapi.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 16,
+       "why": "alert"
+      }
+     ],
+     "sha256": "3466d8fa9961be6999a88e6528f64776967ec419641ddb7d1a0eed573b896b66"
+    },
+    "starlette.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 8,
+       "why": "alert"
+      }
+     ],
+     "sha256": "1030ab73513742f7fc5800d2f3223d81651e95aae3c75139b2ca5d7a861273e4"
+    }
+   },
+   "tier": "property"
+  },
+  "CWE-943-NoSqlInjection": {
+   "cwes": [
+    943
+   ],
+   "files": {
+    "PoC/__init__.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "PoC/populate.py": {
+     "negatives": [],
+     "positives": [],
+     "sha256": "f1d4e59eef1e7b5641b520d68f2509a813541401a9d75f9fd8427aa2e47cbde0"
+    },
+    "PoC/server.py": {
+     "negatives": [
+      {
+       "line": 21,
+       "why": "result=OK"
+      },
+      {
+       "line": 38,
+       "why": "result=OK"
+      },
+      {
+       "line": 72,
+       "why": "result=OK"
+      },
+      {
+       "line": 103,
+       "why": "result=OK"
+      }
+     ],
+     "positives": [
+      {
+       "line": 30,
+       "why": "alert"
+      },
+      {
+       "line": 31,
+       "why": "alert"
+      },
+      {
+       "line": 47,
+       "why": "alert"
+      },
+      {
+       "line": 61,
+       "why": "alert"
+      },
+      {
+       "line": 91,
+       "why": "alert"
+      },
+      {
+       "line": 92,
+       "why": "alert"
+      },
+      {
+       "line": 102,
+       "why": "alert"
+      }
+     ],
+     "sha256": "c15acd0d655159195dc36d28b5a1ca44ae5bc5b71f712b95b90f461fa246255e"
+    },
+    "flask_mongoengine_bad.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 22,
+       "why": "alert"
+      },
+      {
+       "line": 30,
+       "why": "alert"
+      }
+     ],
+     "sha256": "f6dd40d8088bd2c634aa01d9f92504d4ac286c00e9f44a4b2afafc37848c68cb"
+    },
+    "flask_mongoengine_good.py": {
+     "negatives": [
+      {
+       "line": 24,
+       "why": "result=OK"
+      }
+     ],
+     "positives": [],
+     "sha256": "2bff21de7a8170f8da9a4e31d6f7dc8eac86576e70763751413bd6275b41547b"
+    },
+    "flask_pymongo_bad.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 14,
+       "why": "alert"
+      }
+     ],
+     "sha256": "989a0228202894eca7d108404ce424716e7ffc4b4f71633d22608be236de8a89"
+    },
+    "flask_pymongo_good.py": {
+     "negatives": [
+      {
+       "line": 16,
+       "why": "result=OK"
+      }
+     ],
+     "positives": [],
+     "sha256": "cc01fe75d3c26f54aeebef2d7932f764a65b175e8496ab67a8261e907f24c5ae"
+    },
+    "mongoengine_bad.py": {
+     "negatives": [],
+     "positives": [
+      {
+       "line": 22,
+       "why": "alert"
+      },
+      {
+       "line": 30,
+       "why": "alert"
+      },
+      {
+       "line": 38,
+       "why": "alert"
+      },
+      {
+       "line": 46,
+       "why": "alert"
+      },
+      {
+       "line": 53,
+       "why": "alert"
+      },
+      {
+       "line": 61,
+       "why": "alert"
+      }
+     ],
+     "sha256": "5fc8e2a56598f1b5aa8fdee3214ce869c7e18c045a26ff99bfa4ff7eb4a69f8c"
+    },
+    "mongoengine_good.py": {
+     "negatives": [
+      {
+       "line": 24,
+       "why": "result=OK"
+      }
+     ],
+     "positives": [],
+     "sha256": "e3ec5d5bcfcd55aca3c3fcad896818ed19179001b42f11105fa79880ae501d9e"
+    },
+    "pymongo_test.py": {
+     "negatives": [
+      {
+       "line": 24,
+       "why": "result=OK"
+      }
+     ],
+     "positives": [
+      {
+       "line": 15,
+       "why": "alert"
+      },
+      {
+       "line": 33,
+       "why": "alert"
+      },
+      {
+       "line": 43,
+       "why": "alert"
+      },
+      {
+       "line": 59,
+       "why": "alert"
+      },
+      {
+       "line": 61,
+       "why": "alert"
+      },
+      {
+       "line": 62,
+       "why": "alert"
+      },
+      {
+       "line": 63,
+       "why": "alert"
+      }
+     ],
+     "sha256": "23c568cad01a474458e01b4a77a12ab4582e6f1dbf8275b25a06bbad7bfc6530"
+    }
+   },
+   "tier": "taint"
+  }
+ },
+ "source": {
+  "commit": "20ed6480fa1d8c44c99368be99dda541082dc968",
+  "path": "python/ql/test/query-tests/Security",
+  "repo": "https://github.com/github/codeql"
+ }
+}

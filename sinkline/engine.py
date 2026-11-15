@@ -36,6 +36,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 import hashlib
+import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, Union
@@ -177,9 +178,17 @@ def _const_key(node: Optional[ast.AST]) -> Optional[str]:
 # Per-file analysis
 # ---------------------------------------------------------------------------
 
+def _ablations() -> FrozenSet[str]:
+    """Evaluation switch, read from SINKLINE_ABLATE (comma separated): `interproc` stops call-site
+    summaries from being used, `guards` ignores validation guards. Both exist only so bench/heldout can
+    measure what each feature contributes. Unset means the normal analysis."""
+    return frozenset(x.strip() for x in os.environ.get("SINKLINE_ABLATE", "").split(",") if x.strip())
+
+
 class FileAnalyzer(ast.NodeVisitor):
     def __init__(self, path: str, source: str, tree: ast.Module, summaries: Dict[str, Summary], collect: bool,
                  fields: Optional[Dict[str, Taint]] = None):
+        self.ablate = _ablations()
         self.path = path
         self.lines = source.splitlines()
         self.tree = tree
@@ -759,7 +768,7 @@ class FileAnalyzer(ast.NodeVisitor):
             for st in (node.body if decided else node.orelse):
                 self.visit(st)
             return
-        guard_true, guard_false = self._guards_from_test(node.test)
+        guard_true, guard_false = ({}, {}) if "guards" in self.ablate else self._guards_from_test(node.test)
 
         pre_env, pre_guards = dict(self.env), dict(self.guards)
         # then-branch
@@ -1448,7 +1457,7 @@ class FileAnalyzer(ast.NodeVisitor):
         `subprocess.run(...)` must never resolve to a user function called `run`. We only fall
         back to a bare method name when the receiver is `self`/`cls` or a user-defined class.
         """
-        if not func_q:
+        if not func_q or "interproc" in self.ablate:
             return None
         # sibling-module resolution: in bad/mod_user.py, `libuser.login` means bad.libuser.login before anything else
         pkgs = self.module_names[0].split(".")[:-1] if self.module_names else []
