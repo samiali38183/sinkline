@@ -1,1 +1,3 @@
 *.sh text eol=lf
+bench/heldout/manifest.json text eol=lf
+bench/heldout/MANIFEST.sha256 text eol=lf

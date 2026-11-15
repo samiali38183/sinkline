@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Held-out evaluation on CodeQL's Python query tests (`bench/heldout/`, `docs/EVALUATION.md`), with a frozen
+  manifest, a scorer, and an ablation switch (`SINKLINE_ABLATE=interproc|guards`, evaluation only). No change to
+  the default analysis.
 - A view that returns the result of a sanitizer that does not clear CWE-79 is now reported as XSS. Before, any
   sanitizer call in a `return` was treated as safe, so `return shlex.quote(request.args["x"])` and
   `return os.path.basename(...)` were missed. A sanitizer that clears CWE-79 (`escape`, `html.escape`) is still safe.
