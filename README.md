@@ -17,13 +17,7 @@ nobody reads the output. It is pure Python on the standard `ast` module with no 
 to OWASP 2021 and CWE, text, JSON, SARIF and HTML output, a GitHub Action and a pre-commit hook, and there is a
 [sample HTML report](https://samiali38183.github.io/sinkline/).
 
-The chart is a held-out test: 346 labeled bugs from CodeQL's Python query tests, with labels, scorer and rules
-frozen before anything was run and no tuning afterwards ([method and caveats](docs/EVALUATION.md)). On the 219
-bugs in classes sinkline has rules for, it found 88 (40%) with 77% of its findings real. Bandit found 34 (16%)
-at 77% and Semgrep OSS with its registry rules found 53 (24%) at 46%. On the 127 bugs in classes it does not
-attempt, such as weak crypto and cookie flags, it found none and Bandit found 30. Turning the
-interprocedural analysis off changed nothing on this set, so these snippets do not test it. The scores in the
-table below are older: they come from a corpus I labeled myself and from a benchmark whose misses I tuned on.
+Frozen held-out test on 346 labeled bugs: found 88 of 219 taint-class bugs at 0.77 precision (Bandit 34 at 0.77, Semgrep 53 at 0.46) and none of 127 in other classes (Bandit 30). The bugs come from CodeQL's Python query tests, and the labels, scorer and rules were frozen before anything was run, with no tuning afterwards ([method and caveats](docs/EVALUATION.md)). Bandit ran with its default rules and Semgrep OSS with its registry rules. The 127 other bugs are in classes sinkline does not attempt, such as weak crypto and cookie flags; the held-out set's limits are listed under [Limitations](#limitations). The scores in the table below are older: they come from a corpus labeled by the engine's author and from a benchmark whose misses were used for tuning.
 
 | benchmark | metric | sinkline 0.5.1 | bandit 1.9.4 (default rules) | semgrep 1.185.0 (OSS, registry rules `p/python` + `p/owasp-top-ten`) |
 |---|---|---|---|---|
@@ -62,7 +56,7 @@ the `good/` tree, which defines the same function names.
 
 [The problem](#the-problem) · [How it works](#how-it-works) · [Design decisions](#design-decisions) ·
 [Results](#results) · [Quick start](#quick-start) · [Usage](#usage) · [Where it fits](#where-it-fits) ·
-[Limitations](#limitations) · [Roadmap](#roadmap) · [Development](#development) · [Changelog](CHANGELOG.md)
+[Limitations](#limitations) · [Roadmap](#roadmap) · [Development](#development) · [Status](#status) · [Changelog](CHANGELOG.md)
 
 ## The problem
 
@@ -187,7 +181,7 @@ analysis than those tools. The caveats above still apply: I labeled the corpus m
 from 0.4.1 failures on this same benchmark, and the scorer is not the official one.
 
 I reproduced the corpus figures with Python 3.12.2 (earlier runs on 3.10.11 and 3.13.1 gave
-identical results) and the external-benchmark figures with Python 3.12.2 on 2026-11-11. Commands are in
+identical results) and the external-benchmark figures with Python 3.12.2. Commands are in
 [Development](#development).
 
 ### External benchmark (independent)
@@ -416,8 +410,8 @@ benchmark and on the held-out CodeQL test cases (see Results).
 
 ## Limitations
 
-- Accuracy on code it was not tuned on is modest: it misses most of the bugs in the held-out set (recall 0.40 on
-  taint classes) and does not cover weak hash, weak PRNG, cookie flags, cleartext storage or trust-boundary rules at
+- Accuracy on code it was not tuned on is modest: on the held-out set it found 88 of 219 taint-class bugs (recall
+  40%), so it misses 60% of them, and it does not cover weak hash, weak PRNG, cookie flags, cleartext storage or trust-boundary rules at
   all. The false-positive rate on BenchmarkPython is 0.21. Use it to triage, not as a gate you trust blindly.
   The held-out set did not exercise the interprocedural analysis, so that claim rests on the corpus and the
   `vulpy` example.
@@ -499,6 +493,10 @@ docs/examples/  real scan output (vulpy, Vulnerable-Flask-App, dvpwa, corpus as 
 .pre-commit-hooks.yaml   pre-commit hook definition
 .github/workflows/pages.yml   publishes the corpus HTML report to GitHub Pages
 ```
+
+## Status
+
+The external-benchmark figures were reproduced with Python 3.12.2 on 2026-11-11.
 
 ## License
 
