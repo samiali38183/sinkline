@@ -31,7 +31,7 @@ def test_classify_rules():
 
 
 def test_matching_is_one_to_one_and_nearest_first():
-    f = lambda *locs: ev.F("a.py", {89}, [(l, l) for l in locs])  # noqa: E731
+    f = lambda *locs: ev.F("a.py", {89}, [(n, n) for n in locs])  # noqa: E731
     r = ev.score_file([10, 11], [], [f(10)])          # one finding cannot satisfy two positives
     assert (r["tp"], r["fn"], r["fp"]) == (1, 1, 0)
     r = ev.score_file([10], [], [f(10), f(11)])       # the second finding is a false positive

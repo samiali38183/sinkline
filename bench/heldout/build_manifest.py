@@ -17,7 +17,7 @@ import re
 import sys
 import tokenize
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List
 
 REPO = "https://github.com/github/codeql"
 COMMIT = "20ed6480fa1d8c44c99368be99dda541082dc968"

@@ -7,35 +7,33 @@
 
 **sinkline scans Python web apps for security bugs by following user input through the code, and reports it only when it reaches something dangerous without being cleaned first.**
 
-![Bar chart on OWASP BenchmarkPython, 240 vulnerable and 437 safe test cases. Real bugs found: sinkline 0.5.0 175 (73%), sinkline 0.4.1 99 (41%), Bandit 31 (13%), Semgrep 18 (8%). Safe cases wrongly flagged: sinkline 0.5.0 93 (21%), 0.4.1 89 (20%), Bandit 25 (6%), Semgrep 15 (3%).](docs/img/hero.png)
+![Recall and precision of sinkline, Bandit and Semgrep on a held-out set of CodeQL's Python test cases. Taint classes, 219 labeled bugs: sinkline recall 0.40, precision 0.77; Bandit 0.16 and 0.77; Semgrep 0.24 and 0.46. Property classes, 127 labeled bugs: sinkline 0.00 recall, Bandit 0.24, Semgrep 0.18.](docs/img/heldout.png)
 
-*On an independent benchmark, sinkline 0.5.0 found 175 of 240 real bugs against 31 for Bandit and 18 for Semgrep, and it also flagged more safe code (21% of safe cases against 6% and 3%). 0.4.1, before I tuned on the suite's misses, found 99.*
+sinkline is a static analyzer for Flask, FastAPI, Django and aiohttp code. It follows attacker-controlled
+input across functions and files and reports it only when it reaches a sink (SQL, shell, `eval`, file paths,
+redirects, deserialization) without a sanitizer for that bug class, then prints the path so the finding can be
+checked by reading a few lines. I wrote it because pattern linters flag every `cursor.execute` and after a while
+nobody reads the output. It is pure Python on the standard `ast` module with no dependencies, has 43 rules mapped
+to OWASP 2021 and CWE, text, JSON, SARIF and HTML output, a GitHub Action and a pre-commit hook, and there is a
+[sample HTML report](https://samiali38183.github.io/sinkline/).
 
-**What it does, in plain terms.** Many bugs in web apps come from one pattern: data typed by a user ends up inside a database query, a shell command or a file path. sinkline reads the source code, follows that data from where it enters to where it is used, even across functions and files, and prints the path so a person can check the finding by reading a few lines. It does not run the app.
-
-## Technical overview
-
-sinkline is a static analyzer for Python web apps (Flask, FastAPI, Django, aiohttp). It follows
-attacker-controlled input across functions and files and reports it only when it reaches a dangerous
-sink (SQL, shell, `eval`, file paths, redirects, deserialization, ...) without a sanitizer for that
-bug class. I wrote it because pattern linters flag every `cursor.execute`, and after a while nobody reads the output.
+The chart is a held-out test: 346 labeled bugs from CodeQL's Python query tests, with labels, scorer and rules
+frozen before anything was run and no tuning afterwards ([method and caveats](docs/EVALUATION.md)). On the 219
+bugs in classes sinkline has rules for, it found 88 (40%) with 77% of its findings real. Bandit found 34 (16%)
+at 77% and Semgrep OSS with its registry rules found 53 (24%) at 46%. On the 127 bugs in classes it does not
+attempt, such as weak crypto and cookie flags, it found none and Bandit found 30. Turning the
+interprocedural analysis off changed nothing on this set, so these snippets do not test it. The scores in the
+table below are older: they come from a corpus I labeled myself and from a benchmark whose misses I tuned on.
 
 | benchmark | metric | sinkline 0.5.1 | bandit 1.9.4 (default rules) | semgrep 1.185.0 (OSS, registry rules `p/python` + `p/owasp-top-ten`) |
 |---|---|---|---|---|
 | `bench/corpus/`: 109 lines, **labeled by the engine's author, not independent** | precision / recall / F1 | 1.000 / 0.984 / 0.992 | 0.623 / 0.541 / 0.579 (lenient) | not run |
-| **OWASP BenchmarkPython v0.1, independent**: the 10 taint categories (240 vulnerable, 437 safe cases) | TPR / FPR / TPR-FPR | 0.73 / 0.21 / +0.52 | 0.13 / 0.06 / +0.07 | 0.07 / 0.03 / +0.04 |
+| OWASP BenchmarkPython v0.1, **tuned on its misses**: the 10 taint categories (240 vulnerable, 437 safe cases) | TPR / FPR / TPR-FPR | 0.73 / 0.21 / +0.52 | 0.13 / 0.06 / +0.07 | 0.07 / 0.03 / +0.04 |
 | same suite, all 14 categories (adds weak hash, weak PRNG, cookie flags, trust boundary) | TPR / FPR / TPR-FPR | 0.39 / 0.12 / +0.27 | 0.40 / 0.03 / +0.36 | 0.16 / 0.02 / +0.14 |
 
-The independent row is the one to weigh. sinkline 0.4.1 scored 0.41 / 0.20 / +0.21 on the same 10 categories.
-I chose the 0.5.0 changes by reading that run's failures, so 0.5.0 is not a held-out score either.
-sinkline finds several times more of the taint-class cases than the pattern tools, at a higher
-false-positive rate. It does not attempt four of the benchmark's 14 categories. Bandit does, which is why it
-leads over all 14. I scored with my own script, not the official scorer. Method, per-category table and
-open problems are in [`bench/external/`](bench/external/README.md).
-
-It is pure Python on the standard `ast` module with no dependencies. It has 43 rules mapped to OWASP 2021 and CWE,
-text, JSON, SARIF and HTML output, a GitHub Action and a pre-commit hook.
-There is a [sample HTML report](https://samiali38183.github.io/sinkline/) for the benchmark corpus.
+sinkline 0.4.1, before the tuning, scored 0.41 / 0.20 / +0.21 on the 10 BenchmarkPython categories. I scored
+with my own script, not the official one. Method, per-category table and open problems are in
+[`bench/external/`](bench/external/README.md).
 
 ```
 $ sinkline scan vulpy        # fportantier/vulpy @ 5249cc8, one of 5 findings
@@ -58,8 +56,7 @@ sinkline scan path/to/app
 ```
 
 Here the source is in one file and the SQL is built in another. On the same project it reports nothing in
-the `good/` tree, which defines the same function names. I labeled the 109-line corpus myself, so read
-[Results](#results) and [Limitations](#limitations) before trusting the headline score.
+the `good/` tree, which defines the same function names.
 
 ## Contents
 
@@ -293,7 +290,7 @@ To see it on the benchmark instead of your own code:
 git clone https://github.com/samiali38183/sinkline && cd sinkline
 pip install -e ".[dev]"
 sinkline scan bench/corpus/flask_app.py          # 22 findings, each with its flow
-pytest -q                                        # 186 tests on main (the v0.5.1 release has 184), including the corpus gate
+pytest -q                                        # 192 tests on main (the v0.5.1 release has 184), including the corpus gate
 python bench/score.py                            # precision 1.000  recall 0.984  F1 0.992
 ```
 
@@ -414,14 +411,16 @@ findings. The pre-commit hook runs the same check on the developer's machine. Th
 to confirm or dismiss a finding, and to show why a sanitizer was or was not enough.
 
 It should not be your only control. It shows reachability, not an exploit, it only reads Python, and it has the
-blind spots listed below. The only head-to-head run I have is against Bandit and Semgrep OSS on one synthetic
-suite (see Results).
+blind spots listed below. The head-to-head runs I have are against Bandit and Semgrep OSS on one synthetic
+benchmark and on the held-out CodeQL test cases (see Results).
 
 ## Limitations
 
-- Accuracy on independent code is modest. On OWASP BenchmarkPython the false-positive rate is 0.21
-  and the true-positive rate 0.73 on the taint categories, and sinkline does not cover weak hash, weak PRNG,
-  cookie flags or trust-boundary rules at all. Use it to triage, not as a gate you trust blindly.
+- Accuracy on code it was not tuned on is modest: it misses most of the bugs in the held-out set (recall 0.40 on
+  taint classes) and does not cover weak hash, weak PRNG, cookie flags, cleartext storage or trust-boundary rules at
+  all. The false-positive rate on BenchmarkPython is 0.21. Use it to triage, not as a gate you trust blindly.
+  The held-out set did not exercise the interprocedural analysis, so that claim rests on the corpus and the
+  `vulpy` example.
 - The corpus is small and self-labeled: 109 lines, labeled by the person who wrote the engine. It doubles as
   a regression suite (the CI floor is the recorded score), so the headline numbers mean "no regressions, and
   the design limits are visible", not an estimate of how it generalizes. Two of the 0.4.0 changes were written
@@ -466,13 +465,14 @@ These follow from the limits above. None is implemented:
 - Position-sensitive lists, and key-sensitive tracking for dicts built outside literals.
 - Rules for the benchmark categories sinkline does not cover (weak hash, weak PRNG, cookie flags) if the
   scope is widened beyond taint.
-- More labeled real-world projects, to complement the external benchmark.
+- More labeled real-world projects, including multi-function and multi-file cases, which the held-out set lacks.
+- Look at the held-out misses (all NoSQL cases, most SSRF cases) on a new, untouched set, not this one.
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                       # 186 tests on main (184 at v0.5.1): engine unit tests plus the corpus gate
+pytest -q                       # 192 tests on main (184 at v0.5.1): engine unit tests plus the corpus gate
 python bench/score.py -v        # corpus P/R/F1, per-CWE table, per-line FP/FN listing
 pip install ruff mypy && ruff check . && mypy
 pip install bandit && python bench/compare_bandit.py
@@ -480,7 +480,7 @@ pip install bandit && python bench/compare_bandit.py
 
 ```
 sinkline/
-  engine.py    ~1720 lines  abstract interpreter, summaries, fields, guards, fixpoint
+  engine.py    ~1740 lines  abstract interpreter, summaries, fields, guards, fixpoint
   model.py      ~440 lines  sources / sinks / sanitizers / OWASP+CWE table
   resolve.py    ~150 lines  import + alias + receiver-type resolution
   report.py     ~240 lines  text / JSON / SARIF 2.1.0 / HTML
@@ -489,10 +489,12 @@ bench/
   corpus/       labeled ground truth (VULN:CWE-xx / SAFE tags) incl. cross-file + adversarial cases
   score.py      precision / recall / F1 per CWE
   compare_bandit.py
+  heldout/      frozen held-out evaluation: protocol, label manifest, scorer, results
   external/     OWASP BenchmarkPython scorer, run script, per-test results (benchmark itself is not copied)
 tests/          unit tests (one small program per engine feature) + corpus gate + action tests
 scripts/        action-scan.sh, the script action.yml runs
 docs/DESIGN.md  design notes
+docs/EVALUATION.md  held-out evaluation: method, results, ablation, limits
 docs/examples/  real scan output (vulpy, Vulnerable-Flask-App, dvpwa, corpus as HTML and SARIF)
 .pre-commit-hooks.yaml   pre-commit hook definition
 .github/workflows/pages.yml   publishes the corpus HTML report to GitHub Pages
